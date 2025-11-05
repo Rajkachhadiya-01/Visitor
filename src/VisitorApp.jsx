@@ -536,35 +536,23 @@ const canvasRef = useRef(null);
 
 const startCamera = async (mode = facingMode) => {
   try {
-    // Must be triggered by a user click (like "Capture Photo" button)
     const mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: mode },
+      video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
     });
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = mediaStream;
-
-      // ✅ Fix for Safari / iOS: play only after metadata is loaded
-      videoRef.current.onloadedmetadata = async () => {
-        try {
-          // Explicitly set dimensions for iOS rendering
-          videoRef.current.width = videoRef.current.videoWidth || 640;
-          videoRef.current.height = videoRef.current.videoHeight || 480;
-
-          await videoRef.current.play(); // 🔥 ensures stream starts
-          console.log("✅ Camera stream started successfully");
-        } catch (err) {
-          console.error("⚠️ Autoplay blocked:", err);
-        }
-      };
-    }
-
     setStream(mediaStream);
     setShowCamera(true);
+
+    // Wait for next render cycle before attaching stream
+    setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    }, 100);
   } catch (err) {
     console.error("Camera error:", err);
-    alert("Unable to access the camera. Please check permissions and try again.");
+    alert("Unable to access camera. Please check permissions.");
   }
 };
 
@@ -637,10 +625,13 @@ return (
               <video
                 ref={videoRef}
                 autoPlay
-                playsInline   // ✅ required on iOS
-                muted         // ✅ allows autoplay
+                playsInline
+                muted
+                onLoadedMetadata={(e) => {
+                  e.target.play().catch(err => console.error("Play failed:", err));
+                }}
                 className="w-full rounded-lg bg-black"
-                style={{ aspectRatio: '4/3', objectFit: 'cover' }} // ✅ ensures visible frame
+                style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }}
               />
               <div className="flex gap-2 mt-3">
                 <button
