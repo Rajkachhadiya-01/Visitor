@@ -1,6 +1,6 @@
 // src/VisitorApp.jsx
 import React, { useState, useRef } from 'react';
-import { Users, Shield, Home, Bell, UserPlus, Search, CheckCircle, XCircle, Clock, Camera, X } from 'lucide-react';
+import { Users, Shield, Home, Bell, UserPlus, Search, CheckCircle, XCircle, Clock, Camera} from 'lucide-react';
 
 const LoginScreen = ({ onLogin }) => {
 const [userType, setUserType] = useState(null);
