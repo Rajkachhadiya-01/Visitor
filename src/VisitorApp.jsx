@@ -11,8 +11,7 @@ const [userType, setUserType] = useState(null);
 const [selectedResident, setSelectedResident] = useState('');
 
 const residents = [
-// { id: 1, name: 'Amit Kumar', flat: 'A-101' },
-{ id: 1, name: 'Chitudi', flat: 'A-101' },
+{ id: 1, name: 'Amit Kumar', flat: 'A-101' },
 { id: 2, name: 'Priya Sharma', flat: 'B-205' },
 { id: 3, name: 'Rajesh Gupta', flat: 'C-304' },
 ];
