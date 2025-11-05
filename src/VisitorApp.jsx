@@ -536,6 +536,7 @@ const canvasRef = useRef(null);
 
 const startCamera = async (mode = facingMode) => {
   try {
+    // Must be triggered by a user click (like "Capture Photo" button)
     const mediaStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: mode },
       audio: false,
@@ -544,16 +545,17 @@ const startCamera = async (mode = facingMode) => {
     if (videoRef.current) {
       videoRef.current.srcObject = mediaStream;
 
-      // ✅ Safari fix — wait for metadata
+      // ✅ Fix for Safari / iOS: play only after metadata is loaded
       videoRef.current.onloadedmetadata = async () => {
         try {
-          // Set video dimensions explicitly
-          videoRef.current.width = videoRef.current.videoWidth;
-          videoRef.current.height = videoRef.current.videoHeight;
-          await videoRef.current.play();
+          // Explicitly set dimensions for iOS rendering
+          videoRef.current.width = videoRef.current.videoWidth || 640;
+          videoRef.current.height = videoRef.current.videoHeight || 480;
+
+          await videoRef.current.play(); // 🔥 ensures stream starts
           console.log("✅ Camera stream started successfully");
         } catch (err) {
-          console.error("Autoplay blocked:", err);
+          console.error("⚠️ Autoplay blocked:", err);
         }
       };
     }
@@ -568,7 +570,7 @@ const startCamera = async (mode = facingMode) => {
 
 // eslint-disable-next-line react-hooks/exhaustive-deps
 React.useEffect(() => {
-  return () => stopCamera();
+  return () => stopCamera(); // stops the camera when user leaves the page
 }, []);
 
 const capturePhoto = () => {
@@ -635,9 +637,10 @@ return (
               <video
                 ref={videoRef}
                 autoPlay
-                playsInline
-                muted
+                playsInline   // ✅ required on iOS
+                muted         // ✅ allows autoplay
                 className="w-full rounded-lg bg-black"
+                style={{ aspectRatio: '4/3', objectFit: 'cover' }} // ✅ ensures visible frame
               />
               <div className="flex gap-2 mt-3">
                 <button
