@@ -1,6 +1,10 @@
 // src/VisitorApp.jsx
 import React, { useState, useRef } from 'react';
-import { Users, Shield, Home, Bell, UserPlus, Search, CheckCircle, XCircle, Clock, Camera} from 'lucide-react';
+import { 
+  Users, Shield, Home, Bell, UserPlus, Search, CheckCircle, 
+  XCircle, Clock, Camera 
+} from 'lucide-react';
+
 
 const LoginScreen = ({ onLogin }) => {
 const [userType, setUserType] = useState(null);
@@ -526,23 +530,46 @@ const [vehicle, setVehicle] = useState('');
 const [photo, setPhoto] = useState(null);
 const [showCamera, setShowCamera] = useState(false);
 const [stream, setStream] = useState(null);
+const [facingMode, setFacingMode] = useState('user');
 const videoRef = useRef(null);
 const canvasRef = useRef(null);
 
-const startCamera = async () => {
-try {
-const mediaStream = await navigator.mediaDevices.getUserMedia({
-video: { facingMode: 'user' }
-});
-setStream(mediaStream);
-if (videoRef.current) {
-videoRef.current.srcObject = mediaStream;
-}
-setShowCamera(true);
-} catch (err) {
-alert('Camera access denied or not available');
-}
+const startCamera = async (mode = facingMode) => {
+  try {
+    const mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: mode },
+      audio: false,
+    });
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = mediaStream;
+
+      // ✅ Safari fix — wait for metadata
+      videoRef.current.onloadedmetadata = async () => {
+        try {
+          // Set video dimensions explicitly
+          videoRef.current.width = videoRef.current.videoWidth;
+          videoRef.current.height = videoRef.current.videoHeight;
+          await videoRef.current.play();
+          console.log("✅ Camera stream started successfully");
+        } catch (err) {
+          console.error("Autoplay blocked:", err);
+        }
+      };
+    }
+
+    setStream(mediaStream);
+    setShowCamera(true);
+  } catch (err) {
+    console.error("Camera error:", err);
+    alert("Unable to access the camera. Please check permissions and try again.");
+  }
 };
+
+// eslint-disable-next-line react-hooks/exhaustive-deps
+React.useEffect(() => {
+  return () => stopCamera();
+}, []);
 
 const capturePhoto = () => {
 if (videoRef.current && canvasRef.current) {
@@ -609,25 +636,38 @@ return (
                 ref={videoRef}
                 autoPlay
                 playsInline
-                className="w-full rounded-lg"
+                muted
+                className="w-full rounded-lg bg-black"
               />
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={capturePhoto}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700"
+                  className="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700"
                 >
-                  Capture
+                  📸 Capture
+                </button>
+                <button
+                  onClick={() => {
+                    stopCamera();
+                    setTimeout(() => {
+                      const newMode = facingMode === 'user' ? 'environment' : 'user';
+                      setFacingMode(newMode);
+                      startCamera(newMode);
+                    }, 300);
+                  }}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
+                >
+                  🔄 Flip Camera
                 </button>
                 <button
                   onClick={stopCamera}
-                  className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300"
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300"
                 >
-                  Cancel
+                  ✖ Close
                 </button>
               </div>
             </div>
           )}
-          
           {photo && (
             <div className="relative">
               <img src={photo} alt="Visitor" className="w-full rounded-lg" />
