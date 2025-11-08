@@ -1,10 +1,154 @@
 // src/VisitorApp.jsx
+import { saveData, loadData, clearAllData } from './utils/storage';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Users, Shield, Home, Bell, UserPlus, Search, CheckCircle,
   XCircle, Clock, Camera
 } from 'lucide-react';
 import FilterDropdown from './components/FilterDropdown';
+
+// Notification sound utility
+const playNotificationSound = () => {
+// Notification sound utility (browser-based beep - no file needed)
+const playNotificationSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800; // Frequency in Hz
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (error) {
+    console.log('Audio not supported:', error);
+  }
+};
+  // try {
+  //   // Correct path for public folder files (no 'public/' prefix needed)
+  //   const audio = new Audio('/alert.mp3');
+  //   audio.volume = 0.5; // Volume should be 0.0 to 1.0 (not 50)
+  //   audio.play().catch(err => console.log('Sound play failed:', err));
+  // } catch (error) {
+  //   console.log('Audio not supported:', error);
+  // }
+};
+
+// Demo data with safe temporary storage
+const defaultResidents = [
+{ id: 1, name: 'Amit Kumar', flat: 'A-101', mobile: '6353872412' },
+{ id: 2, name: 'Priya Sharma', flat: 'B-205', mobile: '6483829372' },
+{ id: 3, name: 'Rajesh Gupta', flat: 'C-304', mobile: '8937354908' },
+];
+
+const defaultGuards = [
+  { id: 1, name: 'Shyamlal', gate: 'Main-Gate', mobile: '6353872413' },
+  { id: 2, name: 'Jagwinder Singh', gate: 'Exit-Gate', mobile: '9193647382' },
+];
+
+// Demo visitor data for testing
+const defaultVisitors = [
+  {
+    id: 1001,
+    name: 'Ramesh Verma',
+    phone: '9876543210',
+    flat: 'A-101',
+    purpose: 'Personal Visit',
+    vehicle: 'MH-01-AB-1234',
+    checkIn: '09:30 AM',
+    checkOut: '11:45 AM',
+    status: 'out',
+    approvalStatus: 'approved',
+    photo: null
+  },
+  {
+    id: 1002,
+    name: 'Sunita Devi',
+    phone: '9876543211',
+    flat: 'B-205',
+    purpose: 'Domestic Help',
+    vehicle: '',
+    checkIn: '08:00 AM',
+    status: 'inside',
+    approvalStatus: 'approved',
+    photo: null
+  },
+  {
+    id: 1003,
+    name: 'Vikram Singh',
+    phone: '9876543212',
+    flat: 'C-304',
+    purpose: 'Delivery',
+    vehicle: 'MH-02-XY-5678',
+    checkIn: '10:15 AM',
+    status: 'pending',
+    approvalStatus: 'pending',
+    photo: null
+  },
+  {
+    id: 1004,
+    name: 'Deepak Kumar',
+    phone: '9876543213',
+    flat: 'A-101',
+    purpose: 'Service Provider',
+    vehicle: '',
+    checkIn: '02:30 PM',
+    status: 'inside',
+    approvalStatus: 'approved',
+    photo: null
+  },
+  {
+    id: 1005,
+    name: 'Anjali Sharma',
+    phone: '9876543214',
+    flat: 'B-205',
+    purpose: 'Personal Visit',
+    vehicle: 'GJ-01-CD-9012',
+    checkIn: '11:00 AM',
+    checkOut: '01:30 PM',
+    status: 'out',
+    approvalStatus: 'approved',
+    photo: null
+  }
+];
+
+// Demo pre-approval data
+const defaultApprovals = [
+  {
+    id: 2001,
+    name: 'Radha Bai',
+    type: 'Domestic Help',
+    frequency: 'daily',
+    flat: 'A-101',
+    approved: true,
+    requestTime: '08:00 AM'
+  },
+  {
+    id: 2002,
+    name: 'Plumber - Rajesh',
+    type: 'Service',
+    frequency: 'once',
+    flat: 'B-205',
+    approved: false,
+    requestTime: '09:45 AM'
+  },
+  {
+    id: 2003,
+    name: 'Electrician - Mohan',
+    type: 'Service',
+    frequency: 'once',
+    flat: 'C-304',
+    approved: true,
+    requestTime: '10:30 AM'
+  }
+];
 
 const LoginScreen = ({ onLogin }) => {
   const [userType, setUserType] = useState(null);
@@ -14,16 +158,18 @@ const LoginScreen = ({ onLogin }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [notice, setNotice] = useState({ type: '', text: '' });
 
-  const residents = [
-    { id: 1, name: 'Amit Kumar', flat: 'A-101', mobile: '6353872412' },
-    { id: 2, name: 'Priya Sharma', flat: 'B-205', mobile: '6483829372' },
-    { id: 3, name: 'Rajesh Gupta', flat: 'C-304', mobile: '8937354908' },
-  ];
+  useEffect(() => {
+    if (notice.text) {
+      const timer = setTimeout(() => {
+        setNotice({ type: '', text: '' });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [notice]);
 
-  const securityGuards = [
-    { id: 1, name: 'Shyamlal', gate: 'Main-Gate', mobile: '6353872413' },
-    { id: 2, name: 'Jagwinder singh', gate: 'Exit-Gate', mobile: '9193647382' }
-  ];
+  // ✅ Demo data state (moved OUT of handleSendOtp)
+  const [residents] = useState(() => loadData('residents', defaultResidents));
+  const [securityGuards] = useState(() => loadData('securityGuards', defaultGuards));
 
   const handleSendOtp = () => {
     if (mobile.length !== 10) {
@@ -47,6 +193,7 @@ const LoginScreen = ({ onLogin }) => {
 
   const handleVerifyOtp = () => {
     if (otp === '1234') {
+      // Remove success message from OTP page - it will show on dashboard
       if (userType === 'resident') {
         onLogin('resident', selectedUser.flat, selectedUser);
       } else {
@@ -150,12 +297,13 @@ const LoginScreen = ({ onLogin }) => {
                 Enter OTP
               </label>
               <input
-                type="text"
+                type="password"
                 maxLength="4"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                 placeholder="Enter 4-digit OTP"
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-center text-2xl tracking-widest focus:border-indigo-500 focus:outline-none"
+                style={{ letterSpacing: '0.5em' }}
               />
             </div>
 
@@ -172,12 +320,22 @@ const LoginScreen = ({ onLogin }) => {
   );
 };
 
-const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo, onLogout, onAddApproval, onApproveRequest, onApproveVisitor, onRejectVisitor, loginMessage }) => {
+const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo, onLogout, onClearData, onAddApproval, onApproveRequest, onApproveVisitor, onRejectVisitor, loginMessage }) => {
   const myVisitors = visitors.filter(v => v.flat === currentResident);
   const myApprovals = approvals.filter(a => a.flat === currentResident && a.approved);
   const pendingRequests = approvals.filter(a => a.flat === currentResident && !a.approved);
   const pendingVisitors = visitors.filter(v => v.flat === currentResident && v.status === 'pending');
   const inside = myVisitors.filter(v => v.status === 'inside').length;
+
+  // 🔔 Sound notification for new pending visitors
+  const prevPendingCountRef = useRef(0);
+  
+  useEffect(() => {
+    if (pendingVisitors.length > prevPendingCountRef.current && prevPendingCountRef.current !== 0) {
+      playNotificationSound();
+    }
+    prevPendingCountRef.current = pendingVisitors.length;
+  }, [pendingVisitors.length]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -187,15 +345,24 @@ const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo,
             <h1 className="text-2xl font-bold">Resident Dashboard</h1>
             <p className="text-indigo-200">Flat {currentResident} - {residentInfo?.name}</p>
           </div>
-          <button onClick={onLogout} className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold">
-            Logout
-          </button>
+            <div className="flex gap-2">
+              {/* do not change with this button */}
+              {/* <button 
+                onClick={onClearData}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-600"
+              >
+                Clear Data
+              </button> */}
+              <button onClick={onLogout} className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold">
+                Logout
+              </button>
+            </div>
         </div>
       </div>
 
       {loginMessage && (
         <div className="max-w-6xl mx-auto mt-4">
-          <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-2 rounded-lg">
+          <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-2 rounded-lg transition-opacity duration-500">
             <p className="font-semibold text-green-800">{loginMessage}</p>
           </div>
         </div>
@@ -336,7 +503,7 @@ const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo,
 
         <div className="bg-white rounded-xl shadow mb-6">
           <div className="p-6 border-b flex justify-between items-center">
-            <h2 className="text-xl font-bold">Approved Visitors</h2>
+            <h2 className="text-xl font-bold">Pre-Approved Visitors</h2>
             <button
               onClick={onAddApproval}
               className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700"
@@ -404,7 +571,7 @@ const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo,
   );
 };
 
-const SecurityDashboard = ({ visitors, approvals, securityData, onLogout, onCheckIn, onSearch, onCheckOut, loginMessage }) => {
+const SecurityDashboard = ({ visitors, approvals, securityData, onLogout, onClearData, onCheckIn, onSearch, onCheckOut, loginMessage }) => {
   const inside = visitors.filter(v => v.status === 'inside');
   const pending = visitors.filter(v => v.status === 'pending');
   const pendingApprovals = approvals.filter(a => !a.approved);
@@ -417,15 +584,24 @@ const SecurityDashboard = ({ visitors, approvals, securityData, onLogout, onChec
             <h1 className="text-2xl font-bold">Security Dashboard</h1>
             <p className="text-gray-300">{securityData ? `${securityData.name} - ${securityData.gate}` : 'Gate Management'}</p>
           </div>
-          <button onClick={onLogout} className="bg-white text-gray-800 px-4 py-2 rounded-lg font-semibold">
-            Logout
-          </button>
+            <div className="flex gap-2">
+              {/* do not change with this button */}
+              {/* <button 
+                onClick={onClearData}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-600"
+              >
+                Clear Data
+              </button> */}
+              <button onClick={onLogout} className="bg-white text-gray-800 px-4 py-2 rounded-lg font-semibold">
+                Logout
+              </button>
+            </div>
         </div>
       </div>
 
       {loginMessage && (
         <div className="max-w-6xl mx-auto mt-4">
-          <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-2 rounded-lg">
+          <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-2 rounded-lg transition-opacity duration-500">
             <p className="font-semibold text-green-800">{loginMessage}</p>
           </div>
         </div>
@@ -620,6 +796,14 @@ const CheckInForm = ({ onSubmit, onCancel, residents }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
+
   const startCamera = async (mode = facingMode) => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -640,14 +824,6 @@ const CheckInForm = ({ onSubmit, onCancel, residents }) => {
       alert("Unable to access camera. Please check permissions.");
     }
   };
-
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [stream]);
 
   const capturePhoto = () => {
     if (videoRef.current && canvasRef.current) {
@@ -795,7 +971,6 @@ const CheckInForm = ({ onSubmit, onCancel, residents }) => {
               />
             </div>
 
-
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Purpose *</label>
               <FilterDropdown
@@ -892,7 +1067,6 @@ const AddApprovalForm = ({ onSubmit, onCancel }) => {
               />
             </div>
 
-
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Frequency *</label>
               <FilterDropdown
@@ -906,7 +1080,6 @@ const AddApprovalForm = ({ onSubmit, onCancel }) => {
                 placeholder="Type to search frequency..."
               />
             </div>
-
 
             <div className="flex gap-3 pt-4">
               <button
@@ -996,21 +1169,38 @@ export default function VisitorApp() {
   const [currentResident, setCurrentResident] = useState(null);
   const [residentData, setResidentData] = useState(null);
   const [securityData, setSecurityData] = useState(null);
-  const [visitors, setVisitors] = useState([
-    { id: 1, name: 'John Doe', phone: '9999999999', flat: 'A-101', purpose: 'Personal Visit', checkIn: '10:30 AM', status: 'inside', vehicle: 'MH-01-AB-1234', approvalStatus: 'approved', photo: null },
-    { id: 2, name: 'Sunita', phone: '8888888888', flat: 'A-101', purpose: 'Domestic Help', checkIn: '08:00 AM', checkOut: '12:30 PM', status: 'out', approvalStatus: 'approved', photo: null },
-  ]);
-  const [approvals, setApprovals] = useState([
-    { id: 1, name: 'Sunita (Maid)', type: 'Domestic Help', flat: 'A-101', frequency: 'daily', approved: true },
-    { id: 2, name: 'Ravi (Plumber)', type: 'Service', flat: 'A-101', frequency: 'once', approved: true },
-  ]);
+const [visitors, setVisitors] = useState(() => loadData('visitors', defaultVisitors));
+  const [approvals, setApprovals] = useState(() => loadData('approvals', defaultApprovals));
   const [loginMessage, setLoginMessage] = useState('');
+  const [residents] = useState(() => loadData('residents', defaultResidents));
 
-  const residents = [
-    { id: 1, name: 'Amit Kumar', flat: 'A-101' },
-    { id: 2, name: 'Priya Sharma', flat: 'B-205' },
-    { id: 3, name: 'Rajesh Gupta', flat: 'C-304' },
-  ];
+  // Persist login state
+  // Persist login state (but NOT loginMessage to prevent persistence on refresh)
+  useEffect(() => {
+    if (view !== 'login') {
+      const loginState = {
+        view,
+        currentResident,
+        residentData,
+        securityData,
+        loginMessage: '' // Never persist login message
+      };
+      saveData('loginState', loginState);
+    }
+  }, [view, currentResident, residentData, securityData]);
+
+  // Restore login state on mount
+  // Restore login state on mount (loginMessage always empty on refresh)
+  useEffect(() => {
+    const savedState = loadData('loginState', null);
+    if (savedState && savedState.view !== 'login') {
+      setView(savedState.view);
+      setCurrentResident(savedState.currentResident);
+      setResidentData(savedState.residentData);
+      setSecurityData(savedState.securityData);
+      // loginMessage is intentionally NOT restored to prevent showing on refresh
+    }
+  }, []);
 
   const handleCheckIn = (data) => {
     const newVisitor = {
@@ -1020,28 +1210,36 @@ export default function VisitorApp() {
       status: 'pending',
       approvalStatus: 'pending'
     };
-    setVisitors([newVisitor, ...visitors]);
+    const updated = [newVisitor, ...visitors];
+    setVisitors(updated);
+    saveData('visitors', updated);
     setView('security-dash');
   };
 
   const handleApproveVisitor = (visitorId) => {
-    setVisitors(visitors.map(v =>
+    const updated = visitors.map(v =>
       v.id === visitorId ? { ...v, status: 'inside', approvalStatus: 'approved' } : v
-    ));
+    );
+    setVisitors(updated);
+    saveData('visitors', updated);
   };
 
   const handleRejectVisitor = (visitorId) => {
-    setVisitors(visitors.map(v =>
+    const updated = visitors.map(v =>
       v.id === visitorId ? { ...v, status: 'rejected', approvalStatus: 'rejected' } : v
-    ));
+    );
+    setVisitors(updated);
+    saveData('visitors', updated);
   };
 
   const handleCheckOut = (id) => {
-    setVisitors(visitors.map(v =>
+    const updated = visitors.map(v =>
       v.id === id
         ? { ...v, status: 'out', checkOut: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }
         : v
-    ));
+    );
+    setVisitors(updated);
+    saveData('visitors', updated);
   };
 
   const handleAddApproval = (data) => {
@@ -1052,14 +1250,18 @@ export default function VisitorApp() {
       approved: false,
       requestTime: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
     };
-    setApprovals([...approvals, newApproval]);
+    const updated = [...approvals, newApproval];
+    setApprovals(updated);
+    saveData('approvals', updated);
     setView('resident-dash');
   };
 
   const handleApproveRequest = (id) => {
-    setApprovals(approvals.map(a =>
+    const updated = approvals.map(a =>
       a.id === id ? { ...a, approved: true } : a
-    ));
+    );
+    setApprovals(updated);
+    saveData('approvals', updated);
   };
 
   if (view === 'login') {
@@ -1070,8 +1272,15 @@ export default function VisitorApp() {
       } else {
         setSecurityData(userData);
       }
-      setLoginMessage('User login successful');
+      
+      // Show login message on dashboard (not OTP page)
       setView(role === 'resident' ? 'resident-dash' : 'security-dash');
+      setLoginMessage('User login successful');
+      
+      // Auto-hide login message after 3 seconds
+      setTimeout(() => {
+        setLoginMessage('');
+      }, 3000);
     }} />;
   }
 
@@ -1088,6 +1297,13 @@ export default function VisitorApp() {
           setCurrentResident(null);
           setResidentData(null);
           setLoginMessage('');
+          saveData('loginState', null);
+        }}
+        onClearData={() => {
+          if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+            clearAllData();
+            window.location.reload();
+          }
         }}
         onAddApproval={() => setView('add-approval')}
         onApproveRequest={handleApproveRequest}
@@ -1108,6 +1324,13 @@ export default function VisitorApp() {
           setView('login');
           setSecurityData(null);
           setLoginMessage('');
+          saveData('loginState', null);
+        }}
+        onClearData={() => {
+          if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+            clearAllData();
+            window.location.reload();
+          }
         }}
         onCheckIn={() => setView('check-in')}
         onSearch={() => setView('search')}
