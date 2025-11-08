@@ -30,9 +30,10 @@ const FilterDropdown = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // ✅ FIXED: Added `highlight` to dependency array
   useEffect(() => {
     if (highlight >= filtered.length) setHighlight(0);
-  }, [filtered.length]);
+  }, [filtered.length, highlight]);
 
   const currentLabel = options.find(o => o.value === value)?.label || '';
 

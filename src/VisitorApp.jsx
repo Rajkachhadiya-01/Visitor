@@ -7,17 +7,66 @@ import {
 } from 'lucide-react';
 import FilterDropdown from './components/FilterDropdown';
 
-// Notification sound utility
-const playNotificationSound = () => {
+// Notification sound using HTML5 Audio (simpler and more reliable)
+let audioInstance = null;
+
+export const initAudioContext = () => {
   try {
-    // Correct path for public folder files (no 'public/' prefix needed)
-    const audio = new Audio('/alert.mp3');
-    audio.volume = 0.5; // Volume should be 0.0 to 1.0 (not 50)
-    audio.play().catch(err => console.log('Sound play failed:', err));
-  } catch (error) {
-    console.log('Audio not supported:', error);
+    if (!audioInstance) {
+      audioInstance = new Audio('/alert.mp3');
+      audioInstance.preload = 'auto';
+      console.log("✅ Audio initialized and preloaded");
+    }
+  } catch (err) {
+    console.error("❌ Audio initialization failed:", err);
   }
 };
+
+export const playNotificationSound = async () => {
+  try {
+    if (!audioInstance) {
+      initAudioContext();
+    }
+    
+    // Reset audio to start if it's already playing
+    audioInstance.currentTime = 0;
+    
+    // Play the audio
+    const playPromise = audioInstance.play();
+    
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log("🔔 Sound played successfully");
+        })
+        .catch((err) => {
+          console.error("❌ Audio playback failed:", err);
+          // If autoplay is blocked, user interaction is required
+          console.log("💡 User interaction required for audio. Click anywhere to enable sound.");
+        });
+    }
+  } catch (err) {
+    console.error("❌ Audio playback error:", err);
+  }
+};
+
+// Allow manual console testing
+window.playNotificationSound = playNotificationSound;
+window.initAudioContext = initAudioContext;
+
+// Initialize audio on first user interaction
+let audioInitialized = false;
+const initOnInteraction = () => {
+  if (!audioInitialized) {
+    initAudioContext();
+    audioInitialized = true;
+    console.log("🔊 Audio enabled after user interaction");
+  }
+};
+
+// Use { once: false } to allow multiple initializations if needed
+document.addEventListener('click', initOnInteraction);
+document.addEventListener('touchstart', initOnInteraction);
 
 // Demo data with safe temporary storage
 const defaultResidents = [
@@ -195,9 +244,11 @@ const LoginScreen = ({ onLogin }) => {
 
         {/* Inline notice visible on all steps */}
         {notice?.text && (
-          <div className={`mb-4 p-3 rounded-lg border ${notice.type === 'error'
-            ? 'bg-red-50 text-red-700 border-red-200'
-            : 'bg-green-50 text-green-700 border-green-200'}`}>
+          <div className={`mb-4 p-3 rounded-lg border ${
+            notice.type === 'error'
+              ? 'bg-red-50 text-red-700 border-red-200'
+              : 'bg-green-50 text-green-700 border-green-200'
+          }`}>
             {notice.text}
           </div>
         )}
@@ -280,7 +331,7 @@ const LoginScreen = ({ onLogin }) => {
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                 placeholder="Enter 4-digit OTP"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-center text-2xl tracking-widest focus:border-indigo-500 focus:outline-none"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl text-center tracking-widest focus:border-indigo-500 focus:outline-none"
                 style={{ letterSpacing: '0.5em' }}
               />
             </div>
@@ -305,15 +356,26 @@ const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo,
   const pendingVisitors = visitors.filter(v => v.flat === currentResident && v.status === 'pending');
   const inside = myVisitors.filter(v => v.status === 'inside').length;
 
-  // 🔔 Sound notification for new pending visitors
-  const prevPendingCountRef = useRef(0);
-  
-  useEffect(() => {
-    if (pendingVisitors.length > prevPendingCountRef.current && prevPendingCountRef.current !== 0) {
-      playNotificationSound();
-    }
-    prevPendingCountRef.current = pendingVisitors.length;
-  }, [pendingVisitors.length]);
+// 🔔 Detect new visitor check-in requests (play sound only when new request is added)
+const prevPendingIdsRef = useRef(null);
+
+useEffect(() => {
+  if (prevPendingIdsRef.current === null) {
+    prevPendingIdsRef.current = pendingVisitors.map(v => v.id);
+    return;
+  }
+
+  const currentIds = pendingVisitors.map(v => v.id);
+  const newRequests = currentIds.filter(id => !prevPendingIdsRef.current.includes(id));
+
+  if (newRequests.length > 0) {
+    console.log("🔔 New visitor request detected:", newRequests);
+    initAudioContext(); // ensure audio resumed
+    playNotificationSound();
+  }
+
+  prevPendingIdsRef.current = currentIds;
+}, [pendingVisitors]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -324,7 +386,7 @@ const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo,
             <p className="text-indigo-200">Flat {currentResident} - {residentInfo?.name}</p>
           </div>
             <div className="flex gap-2">
-              {/* do not change with this button */}
+              {/* do not change with this button Resident Dashboard*/}
               {/* <button 
                 onClick={onClearData}
                 className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-600"
@@ -539,6 +601,7 @@ const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo,
                       v.status === 'pending' ? 'Pending' :
                         v.status === 'rejected' ? 'Rejected' : 'Out'}
                   </span>
+
                 </div>
               ))
             )}
@@ -1120,7 +1183,9 @@ const SearchView = ({ visitors, onBack, onCheckOut }) => {
                       <p className="text-sm text-gray-600">Flat: {v.flat} • {v.purpose}</p>
                       <p className="text-xs text-gray-500">In: {v.checkIn} {v.checkOut && `| Out: ${v.checkOut}`}</p>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${v.status === 'inside' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      v.status === 'inside' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
                       {v.status === 'inside' ? 'Inside' : 'Out'}
                     </span>
                   </div>
@@ -1242,25 +1307,26 @@ const [visitors, setVisitors] = useState(() => loadData('visitors', defaultVisit
     saveData('approvals', updated);
   };
 
-  if (view === 'login') {
-    return <LoginScreen onLogin={(role, identifier, userData) => {
-      if (role === 'resident') {
-        setCurrentResident(identifier);
-        setResidentData(userData);
-      } else {
-        setSecurityData(userData);
-      }
-      
-      // Show login message on dashboard (not OTP page)
-      setView(role === 'resident' ? 'resident-dash' : 'security-dash');
-      setLoginMessage('User login successful');
-      
-      // Auto-hide login message after 3 seconds
-      setTimeout(() => {
-        setLoginMessage('');
-      }, 3000);
-    }} />;
-  }
+if (view === 'login') {
+  return <LoginScreen onLogin={(role, identifier, userData) => {
+    if (role === 'resident') {
+      setCurrentResident(identifier);
+      setResidentData(userData);
+    } else {
+      setSecurityData(userData);
+    }
+
+    // 👇 Initialize and unlock audio context after actual click (login)
+    initAudioContext();
+
+    setView(role === 'resident' ? 'resident-dash' : 'security-dash');
+    setLoginMessage('User login successful');
+
+    setTimeout(() => {
+      setLoginMessage('');
+    }, 3000);
+  }} />;
+}
 
   if (view === 'resident-dash') {
     const residentInfo = residentData || residents.find(r => r.flat === currentResident);
