@@ -1,4 +1,5 @@
 // src/VisitorApp.jsx
+import AdminDashboard from './AdminDashboard';
 import { saveData, loadData, clearAllData } from './utils/storage';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -70,17 +71,23 @@ document.addEventListener('touchstart', initOnInteraction);
 
 // Demo data with safe temporary storage
 const defaultResidents = [
-{ id: 1, name: 'Amit Kumar', flat: 'A-101', mobile: '6353872412' },
-{ id: 2, name: 'Priya Sharma', flat: 'B-205', mobile: '6483829372' },
-{ id: 3, name: 'Rajesh Gupta', flat: 'C-304', mobile: '8937354908' },
+  { id: 1, name: 'Amit Kumar', flat: 'A-101', mobile: '6353872412' },
+  { id: 2, name: 'Priya Sharma', flat: 'B-205', mobile: '6483829372' },
+  { id: 3, name: 'Rajesh Gupta', flat: 'C-304', mobile: '8937354908' },
+  { id: 4, name: 'Neha Patel', flat: 'A-203', mobile: '9876543210' },
+  { id: 5, name: 'Vikram Singh', flat: 'B-401', mobile: '9823456789' },
 ];
 
 const defaultGuards = [
   { id: 1, name: 'Shyamlal', gate: 'Main-Gate', mobile: '6353872413' },
   { id: 2, name: 'Jagwinder Singh', gate: 'Exit-Gate', mobile: '9193647382' },
+  { id: 3, name: 'Vikas Yadav', gate: 'Parking-Gate', mobile: '9012345678' },
 ];
 
-// Demo visitor data for testing
+const defaultAdmins = [
+  { id: 1, name: 'Rajesh Patel', mobile: '6353872411', role: 'Admin' },
+];
+
 const defaultVisitors = [
   {
     id: 1001,
@@ -88,7 +95,7 @@ const defaultVisitors = [
     phone: '9876543210',
     flat: 'A-101',
     purpose: 'Personal Visit',
-    vehicle: 'MH-01-AB-1234',
+    vehicle: 'GJ-01-AB-1234',
     checkIn: '09:30 AM',
     checkOut: '11:45 AM',
     status: 'out',
@@ -109,11 +116,11 @@ const defaultVisitors = [
   },
   {
     id: 1003,
-    name: 'Vikram Singh',
+    name: 'Vikram Malhotra',
     phone: '9876543212',
     flat: 'C-304',
     purpose: 'Delivery',
-    vehicle: 'MH-02-XY-5678',
+    vehicle: 'GJ-02-XY-5678',
     checkIn: '10:15 AM',
     status: 'pending',
     approvalStatus: 'pending',
@@ -143,10 +150,33 @@ const defaultVisitors = [
     status: 'out',
     approvalStatus: 'approved',
     photo: null
+  },
+  {
+    id: 1006,
+    name: 'Kiran Bhai',
+    phone: '9876543215',
+    flat: 'A-203',
+    purpose: 'Domestic Help',
+    vehicle: '',
+    checkIn: '07:00 AM',
+    status: 'inside',
+    approvalStatus: 'approved',
+    photo: null
+  },
+  {
+    id: 1007,
+    name: 'Manish Gupta',
+    phone: '9876543216',
+    flat: 'B-401',
+    purpose: 'Personal Visit',
+    vehicle: 'GJ-05-PQ-3456',
+    checkIn: '03:45 PM',
+    status: 'inside',
+    approvalStatus: 'approved',
+    photo: null
   }
 ];
 
-// Demo pre-approval data
 const defaultApprovals = [
   {
     id: 2001,
@@ -155,25 +185,50 @@ const defaultApprovals = [
     frequency: 'daily',
     flat: 'A-101',
     approved: true,
-    requestTime: '08:00 AM'
+    requestTime: '08:00 AM',
+    status: 'Pre-Approved'
   },
   {
     id: 2002,
-    name: 'Plumber - Rajesh',
+    name: 'Rajesh Patel',
     type: 'Service',
     frequency: 'once',
     flat: 'B-205',
     approved: false,
-    requestTime: '09:45 AM'
+    requestTime: '09:45 AM',
+    status: 'Pending'
   },
   {
     id: 2003,
-    name: 'Electrician - Mohan',
+    name: 'Mohan Das',
     type: 'Service',
     frequency: 'once',
     flat: 'C-304',
     approved: true,
-    requestTime: '10:30 AM'
+    requestTime: '10:30 AM',
+    status: 'Pre-Approved'
+  },
+  {
+    id: 2004,
+    name: 'Kamlesh Bhai',
+    type: 'Service',
+    frequency: 'weekly',
+    flat: 'A-203',
+    approved: true,
+    requestTime: '07:15 AM',
+    status: 'Pre-Approved'
+  }
+];
+const defaultActivities = [
+  {
+    id: 1,
+    timestamp: '08:00 AM',
+    action: 'Pre-Approved Visitor Added',
+    performedBy: 'Resident - Flat A-101',
+    visitorName: 'Radha Bai',
+    flat: 'A-101',
+    status: 'Awaiting Arrival',
+    date: new Date().toLocaleDateString()
   }
 ];
 
@@ -194,42 +249,45 @@ const LoginScreen = ({ onLogin }) => {
     }
   }, [notice]);
 
-  // ✅ Demo data state (moved OUT of handleSendOtp)
   const [residents] = useState(() => loadData('residents', defaultResidents));
-  const [securityGuards] = useState(() => loadData('securityGuards', defaultGuards));
+const [securityGuards] = useState(() => loadData('securityGuards', defaultGuards));
+const [admins] = useState(() => loadData('admins', defaultAdmins));
 
-  const handleSendOtp = () => {
-    if (mobile.length !== 10) {
-      setNotice({ type: 'error', text: 'Please enter a valid 10 digit mobile number' });
-      return;
-    }
+const handleSendOtp = () => {
+  if (mobile.length !== 10) {
+    setNotice({ type: 'error', text: 'Please enter a valid 10 digit mobile number' });
+    return;
+  }
 
-    const userData = userType === 'resident'
-      ? residents.find(r => r.mobile === mobile)
-      : securityGuards.find(s => s.mobile === mobile);
+  const userData = userType === 'resident'
+    ? residents.find(r => r.mobile === mobile)
+    : userType === 'security'
+    ? securityGuards.find(s => s.mobile === mobile)
+    : admins.find(a => a.mobile === mobile);
 
-    if (!userData) {
-      setNotice({ type: 'error', text: 'Mobile number not registered' });
-      return;
-    }
+  if (!userData) {
+    setNotice({ type: 'error', text: 'Mobile number not registered' });
+    return;
+  }
 
-    setSelectedUser(userData);
-    setStep('otp');
-    setNotice({ type: '', text: '' });
-  };
+  setSelectedUser(userData);
+  setStep('otp');
+  setNotice({ type: '', text: '' });
+};
 
   const handleVerifyOtp = () => {
-    if (otp === '1234') {
-      // Remove success message from OTP page - it will show on dashboard
-      if (userType === 'resident') {
-        onLogin('resident', selectedUser.flat, selectedUser);
-      } else {
-        onLogin('security', selectedUser.gate, selectedUser);
-      }
+  if (otp === '1234') {
+    if (userType === 'resident') {
+      onLogin('resident', selectedUser.flat, selectedUser);
+    } else if (userType === 'security') {
+      onLogin('security', selectedUser.gate, selectedUser);
     } else {
-      setNotice({ type: 'error', text: 'Invalid OTP. Please try again.' });
+      onLogin('admin', null, selectedUser);
     }
-  };
+  } else {
+    setNotice({ type: 'error', text: 'Invalid OTP. Please try again.' });
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -263,14 +321,21 @@ const LoginScreen = ({ onLogin }) => {
                 <Users className="w-6 h-6" />
                 Login as Resident
               </button>
+<button
+  onClick={() => { setUserType('security'); setStep('mobile'); }}
+  className="w-full flex items-center justify-center gap-3 bg-gray-700 hover:bg-gray-800 text-white font-semibold py-4 px-6 rounded-xl transition"
+>
+  <Shield className="w-6 h-6" />
+  Login as Security
+</button>
 
-              <button
-                onClick={() => { setUserType('security'); setStep('mobile'); }}
-                className="w-full flex items-center justify-center gap-3 bg-gray-700 hover:bg-gray-800 text-white font-semibold py-4 px-6 rounded-xl transition"
-              >
-                <Shield className="w-6 h-6" />
-                Login as Security
-              </button>
+<button
+  onClick={() => { setUserType('admin'); setStep('mobile'); }}
+  className="w-full flex items-center justify-center gap-3 bg-purple-200 dark:bg-purple-800 hover:bg-purple-700 text-white font-semibold py-4 px-6 rounded-xl transition"
+>
+  <Users className="w-6 h-6" />
+  Login as Admin
+</button>
             </div>
           </>
         )}
@@ -286,7 +351,9 @@ const LoginScreen = ({ onLogin }) => {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {userType === 'resident' ? 'Resident Mobile Number' : 'Security Mobile Number'}
+                {userType === 'resident' ? 'Resident Mobile Number' : 
+                userType === 'security' ? 'Security Mobile Number' : 
+                'Admin Mobile Number'}
               </label>
               <input
                 type="tel"
@@ -351,7 +418,7 @@ const LoginScreen = ({ onLogin }) => {
 
 const ResidentDashboard = ({ visitors, approvals, currentResident, residentInfo, onLogout, onClearData, onAddApproval, onApproveRequest, onApproveVisitor, onRejectVisitor, loginMessage }) => {
   const myVisitors = visitors.filter(v => v.flat === currentResident);
-  const myApprovals = approvals.filter(a => a.flat === currentResident && a.approved);
+  const myApprovals = approvals.filter(a => a.flat === currentResident && a.approved && a.arrivalStatus !== 'Arrived at Gate');
   const pendingRequests = approvals.filter(a => a.flat === currentResident && !a.approved);
   const pendingVisitors = visitors.filter(v => v.flat === currentResident && v.status === 'pending');
   const inside = myVisitors.filter(v => v.status === 'inside').length;
@@ -526,15 +593,9 @@ useEffect(() => {
                       <p className="text-xs text-gray-500 mt-1">Requested: {a.requestTime}</p>
                     </div>
                     <span className="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
-                      Pending
+                      {a.status || 'Pending'}
                     </span>
                   </div>
-                  <button
-                    onClick={() => onApproveRequest(a.id)}
-                    className="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700"
-                  >
-                    Approve Request
-                  </button>
                 </div>
               ))}
             </div>
@@ -554,23 +615,38 @@ useEffect(() => {
           </div>
           <div className="p-6 space-y-3">
             {myApprovals.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No approved visitors</p>
+              <p className="text-gray-500 text-center py-4">No pre-approved visitors</p>
             ) : (
               myApprovals.map(a => (
-                <div key={a.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-semibold">{a.name}</p>
-                    <p className="text-sm text-gray-600">{a.type} • {a.frequency}</p>
+                <div key={a.id} className="flex justify-between items-start p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex-1">
+                    <p className="font-semibold text-lg">{a.name}</p>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Type:</span> {a.type}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Frequency:</span> {a.frequency}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Requested Time:</span> {a.requestTime}
+                      </p>
+                    </div>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                    Active
-                  </span>
+                  <div className="ml-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                      a.arrivalStatus === 'Arrived at Gate' 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {a.arrivalStatus || 'Not Arrived Yet'}
+                    </span>
+                  </div>
                 </div>
               ))
             )}
           </div>
         </div>
-
         <div className="bg-white rounded-xl shadow">
           <div className="p-6 border-b">
             <h2 className="text-xl font-bold">Visitor History</h2>
@@ -612,10 +688,9 @@ useEffect(() => {
   );
 };
 
-const SecurityDashboard = ({ visitors, approvals, securityData, onLogout, onClearData, onCheckIn, onSearch, onCheckOut, loginMessage }) => {
-  const inside = visitors.filter(v => v.status === 'inside');
+const SecurityDashboard = ({ visitors, approvals, securityData, onLogout, onClearData, onCheckIn, onSearch, onCheckOut, onMarkArrived, loginMessage }) => {  const inside = visitors.filter(v => v.status === 'inside');
   const pending = visitors.filter(v => v.status === 'pending');
-  const pendingApprovals = approvals.filter(a => !a.approved);
+  const pendingApprovals = approvals.filter(a => a.approved); // Show approved visitors awaiting arrival
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -769,25 +844,40 @@ const SecurityDashboard = ({ visitors, approvals, securityData, onLogout, onClea
         {pendingApprovals.length > 0 && (
           <div className="bg-white rounded-xl shadow mb-6">
             <div className="p-6 border-b">
-              <h2 className="text-xl font-bold">Pre-Approvals Awaiting Resident Confirmation</h2>
+              <h2 className="text-xl font-bold">Pre-Approvals Awaiting Arrival</h2>
+              <p className="text-sm text-gray-600 mt-1">Click "Come In" when visitor arrives at gate</p>
             </div>
             <div className="p-6 space-y-3">
               {pendingApprovals.map(a => (
-                <div key={a.id} className="flex justify-between items-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <div>
-                    <p className="font-semibold">{a.name}</p>
-                    <p className="text-sm text-gray-600">Flat: {a.flat} • {a.type} • {a.frequency}</p>
-                    <p className="text-xs text-gray-500">Requested: {a.requestTime}</p>
+                <div key={a.id} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <p className="font-semibold text-lg">{a.name}</p>
+                      <p className="text-sm text-gray-600 mt-1">Flat: {a.flat} • {a.type} • {a.frequency}</p>
+                      <p className="text-xs text-gray-500 mt-1">Expected: {a.requestTime}</p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 whitespace-nowrap ml-2">
+                      {a.arrivalStatus || 'Not Arrived Yet'}
+                    </span>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
-                    Awaiting Approval
-                  </span>
+                  {(!a.arrivalStatus || a.arrivalStatus === 'Not Arrived Yet') && (
+                    <button
+                      onClick={() => onMarkArrived(a.id)}
+                      className="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition"
+                    >
+                      ✓ Come In (Mark as Arrived)
+                    </button>
+                  )}
+                  {a.arrivalStatus === 'Arrived at Gate' && (
+                    <div className="w-full bg-green-50 text-green-700 py-2 rounded-lg font-semibold text-center border border-green-200">
+                      ✓ Visitor has arrived at gate
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
-
         <div className="bg-white rounded-xl shadow">
           <div className="p-6 border-b">
             <h2 className="text-xl font-bold">Currently Inside</h2>
@@ -999,9 +1089,9 @@ const CheckInForm = ({ onSubmit, onCancel, residents }) => {
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full px-4 py-3 border rounded-lg"
                 placeholder="Phone number"
+                maxLength="10"
               />
             </div>
-
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Flat *</label>
               <FilterDropdown
@@ -1026,7 +1116,6 @@ const CheckInForm = ({ onSubmit, onCancel, residents }) => {
                 placeholder="Type to search purpose..."
               />
             </div>
-
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Vehicle (Optional)</label>
               <input
@@ -1037,7 +1126,6 @@ const CheckInForm = ({ onSubmit, onCancel, residents }) => {
                 placeholder="MH-01-AB-1234"
               />
             </div>
-
             <div className="flex gap-3 pt-4">
               <button
                 onClick={handleSubmit}
@@ -1211,40 +1299,61 @@ export default function VisitorApp() {
   const [view, setView] = useState('login');
   const [currentResident, setCurrentResident] = useState(null);
   const [residentData, setResidentData] = useState(null);
-  const [securityData, setSecurityData] = useState(null);
+const [securityData, setSecurityData] = useState(null);
+const [adminData, setAdminData] = useState(null);
 const [visitors, setVisitors] = useState(() => loadData('visitors', defaultVisitors));
-  const [approvals, setApprovals] = useState(() => loadData('approvals', defaultApprovals));
-  const [loginMessage, setLoginMessage] = useState('');
-  const [residents] = useState(() => loadData('residents', defaultResidents));
+const [approvals, setApprovals] = useState(() => loadData('approvals', defaultApprovals));
+const [activities, setActivities] = useState(() => loadData('activities', defaultActivities));
+const [loginMessage, setLoginMessage] = useState('');
+const [residents] = useState(() => loadData('residents', defaultResidents));
+const [securityGuards] = useState(() => loadData('securityGuards', defaultGuards));
+// eslint-disable-next-line no-unused-vars
+const [admins] = useState(() => loadData('admins', defaultAdmins));
+
 
   // Persist login state
   // Persist login state (but NOT loginMessage to prevent persistence on refresh)
-  useEffect(() => {
-    if (view !== 'login') {
-      const loginState = {
-        view,
-        currentResident,
-        residentData,
-        securityData,
-        loginMessage: '' // Never persist login message
-      };
-      saveData('loginState', loginState);
-    }
-  }, [view, currentResident, residentData, securityData]);
+useEffect(() => {
+  if (view !== 'login') {
+    const loginState = {
+      view,
+      currentResident,
+      residentData,
+      securityData,
+      adminData,
+      loginMessage: ''
+    };
+    saveData('loginState', loginState);
+  }
+}, [view, currentResident, residentData, securityData, adminData, activities]);
 
   // Restore login state on mount
   // Restore login state on mount (loginMessage always empty on refresh)
-  useEffect(() => {
-    const savedState = loadData('loginState', null);
-    if (savedState && savedState.view !== 'login') {
-      setView(savedState.view);
-      setCurrentResident(savedState.currentResident);
-      setResidentData(savedState.residentData);
-      setSecurityData(savedState.securityData);
-      // loginMessage is intentionally NOT restored to prevent showing on refresh
+useEffect(() => {
+  const savedState = loadData('loginState', null);
+  if (savedState && savedState.view !== 'login') {
+    setView(savedState.view);
+    setCurrentResident(savedState.currentResident);
+    setResidentData(savedState.residentData);
+    setSecurityData(savedState.securityData);
+    setAdminData(savedState.adminData);
+  }
+}, []);
+// Listen for localStorage changes for real-time sync
+useEffect(() => {
+  const handleStorageChange = (e) => {
+    if (e.key === 'visitors') {
+      setVisitors(loadData('visitors', defaultVisitors));
+    } else if (e.key === 'approvals') {
+      setApprovals(loadData('approvals', defaultApprovals));
+    } else if (e.key === 'activities') {
+      setActivities(loadData('activities', defaultActivities));
     }
-  }, []);
-
+  };
+  
+  window.addEventListener('storage', handleStorageChange);
+  return () => window.removeEventListener('storage', handleStorageChange);
+}, []);
   const handleCheckIn = (data) => {
     const newVisitor = {
       ...data,
@@ -1256,70 +1365,231 @@ const [visitors, setVisitors] = useState(() => loadData('visitors', defaultVisit
     const updated = [newVisitor, ...visitors];
     setVisitors(updated);
     saveData('visitors', updated);
+    
+    // Log activity
+    const newActivity = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      action: 'Visitor Check-In Requested',
+      performedBy: `Security - ${securityData?.name || 'Gate'}`,
+      visitorName: data.name,
+      flat: data.flat,
+      status: 'Awaiting Resident Approval',
+      date: new Date().toLocaleDateString()
+    };
+    const updatedActivities = [newActivity, ...activities];
+    setActivities(updatedActivities);
+    saveData('activities', updatedActivities);
+    
     setView('security-dash');
   };
 
   const handleApproveVisitor = (visitorId) => {
-    const updated = visitors.map(v =>
-      v.id === visitorId ? { ...v, status: 'inside', approvalStatus: 'approved' } : v
-    );
-    setVisitors(updated);
-    saveData('visitors', updated);
-  };
+  const visitor = visitors.find(v => v.id === visitorId);
+  const updated = visitors.map(v =>
+    v.id === visitorId ? { ...v, status: 'inside', approvalStatus: 'approved' } : v
+  );
+  setVisitors(updated);
+  saveData('visitors', updated);
+  
+  // Log activity
+  if (visitor) {
+    const newActivity = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      action: 'Visitor Entry Approved',
+      performedBy: `Resident - Flat ${currentResident}`,
+      visitorName: visitor.name,
+      flat: visitor.flat,
+      status: 'Approved - Inside',
+      date: new Date().toLocaleDateString()
+    };
+    const updatedActivities = [newActivity, ...activities];
+    setActivities(updatedActivities);
+    saveData('activities', updatedActivities);
+  }
+};
 
   const handleRejectVisitor = (visitorId) => {
-    const updated = visitors.map(v =>
-      v.id === visitorId ? { ...v, status: 'rejected', approvalStatus: 'rejected' } : v
-    );
-    setVisitors(updated);
-    saveData('visitors', updated);
-  };
+  const visitor = visitors.find(v => v.id === visitorId);
+  const updated = visitors.map(v =>
+    v.id === visitorId ? { ...v, status: 'rejected', approvalStatus: 'rejected' } : v
+  );
+  setVisitors(updated);
+  saveData('visitors', updated);
+  
+  // Log activity
+  if (visitor) {
+    const newActivity = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      action: 'Visitor Entry Rejected',
+      performedBy: `Resident - Flat ${currentResident}`,
+      visitorName: visitor.name,
+      flat: visitor.flat,
+      status: 'Rejected',
+      date: new Date().toLocaleDateString()
+    };
+    const updatedActivities = [newActivity, ...activities];
+    setActivities(updatedActivities);
+    saveData('activities', updatedActivities);
+  }
+};
 
   const handleCheckOut = (id) => {
-    const updated = visitors.map(v =>
-      v.id === id
-        ? { ...v, status: 'out', checkOut: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }
-        : v
-    );
-    setVisitors(updated);
-    saveData('visitors', updated);
-  };
-
-  const handleAddApproval = (data) => {
-    const newApproval = {
-      ...data,
+  const visitor = visitors.find(v => v.id === id);
+  const updated = visitors.map(v =>
+    v.id === id
+      ? { ...v, status: 'out', checkOut: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }
+      : v
+  );
+  setVisitors(updated);
+  saveData('visitors', updated);
+  
+  // Log activity
+  if (visitor) {
+    const newActivity = {
       id: Date.now(),
-      flat: currentResident,
-      approved: false,
-      requestTime: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      action: 'Visitor Checked Out',
+      performedBy: `Security - ${securityData?.name || 'Gate'}`,
+      visitorName: visitor.name,
+      flat: visitor.flat,
+      status: 'Completed',
+      date: new Date().toLocaleDateString()
     };
-    const updated = [...approvals, newApproval];
-    setApprovals(updated);
-    saveData('approvals', updated);
-    setView('resident-dash');
+    const updatedActivities = [newActivity, ...activities];
+    setActivities(updatedActivities);
+    saveData('activities', updatedActivities);
+  }
+};
+
+const handleAddApproval = (data) => {
+  const newApproval = {
+    ...data,
+    id: Date.now(),
+    flat: currentResident,
+    approved: true,
+    requestTime: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    status: 'Pre-Approved',
+    arrivalStatus: 'Not Arrived Yet'
   };
+  const updated = [...approvals, newApproval];
+  setApprovals(updated);
+  saveData('approvals', updated);
+  
+  // Log activity
+  const newActivity = {
+    id: Date.now(),
+    timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    action: 'Pre-Approved Visitor Added',
+    performedBy: `Resident - Flat ${currentResident}`,
+    visitorName: data.name,
+    flat: currentResident,
+    status: 'Awaiting Arrival',
+    date: new Date().toLocaleDateString()
+  };
+  const updatedActivities = [newActivity, ...activities];
+  setActivities(updatedActivities);
+  saveData('activities', updatedActivities);
+  
+  setView('resident-dash');
+};
 
   const handleApproveRequest = (id) => {
-    const updated = approvals.map(a =>
-      a.id === id ? { ...a, approved: true } : a
-    );
-    setApprovals(updated);
-    saveData('approvals', updated);
-  };
+  const updated = approvals.map(a =>
+    a.id === id ? { ...a, approved: true, status: 'Pre-Approved' } : a
+  );
+  setApprovals(updated);
+  saveData('approvals', updated);
+};
+
+const handleMarkArrived = (approvalId) => {
+  const approval = approvals.find(a => a.id === approvalId);
+  
+  // Remove from approvals list
+  const updatedApprovals = approvals.filter(a => a.id !== approvalId);
+  setApprovals(updatedApprovals);
+  saveData('approvals', updatedApprovals);
+  
+  // Add to visitors list as "inside"
+  if (approval) {
+    const newVisitor = {
+      id: Date.now(),
+      name: approval.name,
+      phone: '',
+      flat: approval.flat,
+      purpose: approval.type,
+      vehicle: '',
+      checkIn: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      status: 'inside',
+      approvalStatus: 'approved',
+      photo: null,
+      fromPreApproval: true
+    };
+    
+    const updatedVisitors = [newVisitor, ...visitors];
+    setVisitors(updatedVisitors);
+    saveData('visitors', updatedVisitors);
+    
+    // Log activity
+    const newActivity = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      action: 'Pre-Approved Visitor Checked In',
+      performedBy: `Security - ${securityData?.name || 'Gate'}`,
+      visitorName: approval.name,
+      flat: approval.flat,
+      status: 'Inside',
+      date: new Date().toLocaleDateString()
+    };
+    const updatedActivities = [newActivity, ...activities];
+    setActivities(updatedActivities);
+    saveData('activities', updatedActivities);
+  }
+};
+
+const handleRejectVisitorByAdmin = (visitorId) => {
+  const visitor = visitors.find(v => v.id === visitorId);
+  const updated = visitors.map(v =>
+    v.id === visitorId ? { ...v, status: 'rejected', approvalStatus: 'rejected' } : v
+  );
+  setVisitors(updated);
+  saveData('visitors', updated);
+  
+  // Log activity
+  if (visitor) {
+    const newActivity = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      action: 'Visitor Rejected by Admin',
+      performedBy: `Admin - ${adminData?.name || 'Admin'}`,
+      visitorName: visitor.name,
+      flat: visitor.flat,
+      status: 'Rejected',
+      date: new Date().toLocaleDateString()
+    };
+    const updatedActivities = [newActivity, ...activities];
+    setActivities(updatedActivities);
+    saveData('activities', updatedActivities);
+  }
+};
 
 if (view === 'login') {
   return <LoginScreen onLogin={(role, identifier, userData) => {
     if (role === 'resident') {
       setCurrentResident(identifier);
       setResidentData(userData);
-    } else {
+    } else if (role === 'security') {
       setSecurityData(userData);
+    } else if (role === 'admin') {
+      setAdminData(userData);
     }
 
-    // 👇 Initialize and unlock audio context after actual click (login)
     initAudioContext();
 
-    setView(role === 'resident' ? 'resident-dash' : 'security-dash');
+    setView(role === 'resident' ? 'resident-dash' : 
+            role === 'security' ? 'security-dash' : 'admin-dash');
     setLoginMessage('User login successful');
 
     setTimeout(() => {
@@ -1358,31 +1628,32 @@ if (view === 'login') {
     );
   }
 
-  if (view === 'security-dash') {
-    return (
-      <SecurityDashboard
-        visitors={visitors}
-        approvals={approvals}
-        securityData={securityData}
-        onLogout={() => {
-          setView('login');
-          setSecurityData(null);
-          setLoginMessage('');
-          saveData('loginState', null);
-        }}
-        onClearData={() => {
-          if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
-            clearAllData();
-            window.location.reload();
-          }
-        }}
-        onCheckIn={() => setView('check-in')}
-        onSearch={() => setView('search')}
-        onCheckOut={handleCheckOut}
-        loginMessage={loginMessage}
-      />
-    );
-  }
+if (view === 'security-dash') {
+  return (
+    <SecurityDashboard
+      visitors={visitors}
+      approvals={approvals}
+      securityData={securityData}
+      onLogout={() => {
+        setView('login');
+        setSecurityData(null);
+        setLoginMessage('');
+        saveData('loginState', null);
+      }}
+      onClearData={() => {
+        if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+          clearAllData();
+          window.location.reload();
+        }
+      }}
+      onCheckIn={() => setView('check-in')}
+      onSearch={() => setView('search')}
+      onCheckOut={handleCheckOut}
+      onMarkArrived={handleMarkArrived}
+      loginMessage={loginMessage}
+    />
+  );
+}
 
   if (view === 'check-in') {
     return (
@@ -1413,5 +1684,31 @@ if (view === 'login') {
     );
   }
 
+  if (view === 'admin-dash') {
+  return (
+    <AdminDashboard
+  visitors={visitors}
+  approvals={approvals}
+  residents={residents}
+  securityGuards={securityGuards}
+  activities={activities}
+  adminData={adminData}
+  onRejectVisitor={handleRejectVisitorByAdmin}
+  onLogout={() => {
+        setView('login');
+        setAdminData(null);
+        setLoginMessage('');
+        saveData('loginState', null);
+      }}
+      onClearData={() => {
+        if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+          clearAllData();
+          window.location.reload();
+        }
+      }}
+      loginMessage={loginMessage}
+    />
+  );
+}
   return null;
 }
