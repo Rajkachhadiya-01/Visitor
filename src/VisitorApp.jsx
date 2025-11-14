@@ -443,10 +443,10 @@ const handleSendOtp = () => {
 
 const ResidentDashboard = ({visitors, approvals, currentResident, residentInfo, onLogout, onClearData, onAddApproval, onApproveRequest, onApproveVisitor, onRejectVisitor, onCancelApproval, residentNotifications, onDismissResidentNotification}) => {
   const myVisitors = visitors.filter(v => v.flat === currentResident);
-const cancelledApprovals = approvals.filter(a => 
-  a.flat === currentResident && 
-  (a.status === 'Cancelled' || a.arrivalStatus === 'Expired' || a.arrivalStatus === 'Cancelled by Resident')
-);
+// const cancelledApprovals = approvals.filter(a => 
+//   a.flat === currentResident && 
+//   (a.status === 'Cancelled' || a.arrivalStatus === 'Expired' || a.arrivalStatus === 'Cancelled by Resident')
+// );
   const myApprovals = approvals.filter(a => 
   a.flat === currentResident && 
   a.approved && 
@@ -1458,7 +1458,7 @@ const {
   const [residentData, setResidentData] = useState(null);
   const [securityData, setSecurityData] = useState(null);
   const [adminData, setAdminData] = useState(null);
-  
+
   // 👉 RESTORE USER DATA FROM AUTHCONTEXT ON PAGE REFRESH
 useEffect(() => {
   if (user && user.role) {
@@ -1478,8 +1478,10 @@ useEffect(() => {
   const [activities, setActivities] = useState([]);
   const [firebaseInitialized, setFirebaseInitialized] = useState(false);
   // const [loginMessage, setLoginMessage] = useState('');
-  const [residentNotification, setResidentNotification] = useState({ type: '', message: '' });
-  const [securityNotification, setSecurityNotification] = useState({ type: '', message: '' });
+  // const [residentNotification, setResidentNotification] = useState({ type: '', message: '' });
+  const [setResidentNotification] = useState({ type: '', message: '' });
+  const [setSecurityNotification] = useState({ type: '', message: '' });
+  // const [securityNotification, setSecurityNotification] = useState({ type: '', message: '' });
   const [residents] = useState(() => loadData('residents', defaultResidents));
   // eslint-disable-next-line no-unused-vars
   const [admins] = useState(() => loadData('admins', defaultAdmins));
@@ -1492,7 +1494,7 @@ useEffect(() => {
   const pendingVisitors = visitors.filter(v => v.status === 'pending');
 
   if (pendingVisitors.length > prevPendingCount.current) {
-    const newVisitor = pendingVisitors[0];
+    // const newVisitor = pendingVisitors[0];
 
     // showNotification({
     //   title: 'Visitor Waiting for Approval!',
@@ -1811,13 +1813,13 @@ showSecurityNotification({
   }
 };
 
-  const handleApproveRequest = (id) => {
-  const updated = approvals.map(a =>
-    a.id === id ? { ...a, approved: true, status: 'Pre-Approved' } : a
-  );
-  setApprovals(updated);
-  // saveData('approvals', updated);
-};
+//   const handleApproveRequest = (id) => {
+//   const updated = approvals.map(a =>
+//     a.id === id ? { ...a, approved: true, status: 'Pre-Approved' } : a
+//   );
+//   setApprovals(updated);
+//   // saveData('approvals', updated);
+// };
 
 const handleCancelApproval = async (approvalId, flat) => {
   try {
