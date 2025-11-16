@@ -1,6 +1,14 @@
 // src/components/FilterDropdown.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
+/**
+ * FilterDropdown Component - Searchable dropdown with keyboard navigation
+ * @param {Array} options - Array of {label, value} objects
+ * @param {string} value - Currently selected value
+ * @param {function} onChange - Callback when selection changes
+ * @param {string} placeholder - Placeholder text for input
+ * @param {string} noDataText - Text to show when no matches found
+ */
 const FilterDropdown = ({
   options = [],
   value = '',
@@ -13,6 +21,9 @@ const FilterDropdown = ({
   const [highlight, setHighlight] = useState(0);
   const ref = useRef(null);
 
+  /**
+   * Filter options based on search query
+   */
   const filtered = useMemo(() => {
     if (!query) return options;
     const q = query.toLowerCase();
@@ -22,6 +33,9 @@ const FilterDropdown = ({
     );
   }, [options, query]);
 
+  /**
+   * Handle click outside to close dropdown
+   */
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
@@ -30,7 +44,9 @@ const FilterDropdown = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ✅ FIXED: Added `highlight` to dependency array
+  /**
+   * Reset highlight when filtered list changes
+   */
   useEffect(() => {
     if (highlight >= filtered.length) setHighlight(0);
   }, [filtered.length, highlight]);
