@@ -1,8 +1,7 @@
 // src/SecurityDashboard.jsx
 import React, { useState } from 'react';
 import {
-  Users, UserPlus, Search, CheckCircle, XCircle, Clock, Bell, Filter, Calendar
-} from 'lucide-react';
+  Users, UserPlus, Search, CheckCircle, XCircle, Clock, Bell, Calendar} from 'lucide-react';
 
 const SOCIETY_NAME = "Harmony Residency";
 
