@@ -1,11 +1,115 @@
 // src/AdminDashboard.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Users, Activity, UserPlus, Shield, Menu, Home, ClipboardList, 
-  UserCheck, Ban, X
+  UserCheck, Ban, X, Filter, Search
 } from 'lucide-react';
 
 const SOCIETY_NAME = "Harmony Residency";
+
+// FilterDropdown Component
+const FilterDropdown = ({
+  options = [],
+  value = '',
+  onChange,
+  placeholder = 'Type to search...',
+  noDataText = 'No matches',
+}) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlight, setHighlight] = useState(0);
+  const ref = useRef(null);
+
+  const filtered = useMemo(() => {
+    if (!query) return options;
+    const q = query.toLowerCase();
+    return options.filter(o =>
+      String(o.label).toLowerCase().includes(q) ||
+      String(o.value).toLowerCase().includes(q)
+    );
+  }, [options, query]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (highlight >= filtered.length) setHighlight(0);
+  }, [filtered.length, highlight]);
+
+  const currentLabel = options.find(o => o.value === value)?.label || '';
+
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg bg-white cursor-text hover:border-indigo-400 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200"
+        onClick={() => setOpen(true)}
+      >
+        <Filter className="w-4 h-4 text-gray-500" />
+        <input
+          type="text"
+          value={query || currentLabel}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!open) setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setHighlight((h) => Math.max(h - 1, 0));
+            } else if (e.key === 'Enter') {
+              e.preventDefault();
+              if (filtered[highlight]) {
+                onChange(filtered[highlight].value);
+                setQuery('');
+                setOpen(false);
+              }
+            } else if (e.key === 'Escape') {
+              setOpen(false);
+              setQuery('');
+            }
+          }}
+          placeholder={placeholder}
+          className="flex-1 focus:outline-none bg-transparent"
+        />
+        <span className="text-gray-400">▾</span>
+      </div>
+      
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-gray-500 text-center">{noDataText}</div>
+          ) : (
+            filtered.map((o, idx) => (
+              <div
+                key={o.value}
+                className={`px-4 py-2 cursor-pointer text-sm ${
+                  highlight === idx ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                } ${value === o.value ? 'bg-indigo-100 font-semibold' : ''}`}
+                onMouseEnter={() => setHighlight(idx)}
+                onClick={() => {
+                  onChange(o.value);
+                  setQuery('');
+                  setOpen(false);
+                }}
+              >
+                {o.label}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AdminDashboard = ({ 
   visitors = [], 
@@ -18,6 +122,10 @@ const AdminDashboard = ({
 }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [timeFilter, setTimeFilter] = useState('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const tabs = [
     { key: 'overview', label: 'Overview', icon: Home },
@@ -40,9 +148,75 @@ const AdminDashboard = ({
     return "bg-gray-100 text-gray-600";
   };
 
+  // Time filter options
+  const timeFilterOptions = [
+    { label: 'All Time', value: 'all' },
+    { label: 'Today', value: 'today' },
+    { label: 'Yesterday', value: 'yesterday' },
+    { label: 'This Week', value: 'week' },
+    { label: 'This Month', value: 'month' },
+    { label: 'Custom Range', value: 'custom' }
+  ];
+
+  // Filter visitors by time
+  const filterByTime = (items) => {
+    if (timeFilter === 'all') return items;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - 7);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    return items.filter(item => {
+      const itemDate = new Date(item.checkIn || item.createdAt || item.timestamp || 0);
+      
+      switch(timeFilter) {
+        case 'today':
+          return itemDate >= today;
+        case 'yesterday':
+          return itemDate >= yesterday && itemDate < today;
+        case 'week':
+          return itemDate >= weekStart;
+        case 'month':
+          return itemDate >= monthStart;
+        case 'custom':
+          if (customStartDate && customEndDate) {
+            const start = new Date(customStartDate);
+            const end = new Date(customEndDate);
+            end.setHours(23, 59, 59, 999);
+            return itemDate >= start && itemDate <= end;
+          }
+          return true;
+        default:
+          return true;
+      }
+    });
+  };
+
+  // Filter by search query
+  const filterBySearch = (items, fields) => {
+    if (!searchQuery.trim()) return items;
+    const query = searchQuery.toLowerCase();
+    return items.filter(item => 
+      fields.some(field => 
+        String(item[field] || '').toLowerCase().includes(query)
+      )
+    );
+  };
+
+  const filteredVisitors = filterBySearch(filterByTime(visitors), ['name', 'flat', 'purpose', 'status']);
+  const filteredApprovals = filterBySearch(approvals, ['name', 'flat', 'type', 'status']);
+  const insideVisitors = filterBySearch(filterByTime(visitors), ['name', 'flat', 'purpose']).filter(v => v?.status === "inside");
+  const rejectedVisitors = filterBySearch(filterByTime(visitors), ['name', 'flat', 'purpose']).filter(v => v?.status === "rejected");
+  const filteredResidents = filterBySearch(residents, ['name', 'flat', 'mobile']);
+  const filteredSecurity = filterBySearch(securityGuards, ['name', 'gate', 'mobile']);
+
   const stats = {
-    totalVisitors: visitors.length,
-    activeVisitors: visitors.filter(v => v?.status === "inside").length,
+    totalVisitors: filteredVisitors.length,
+    activeVisitors: insideVisitors.length,
     residents: residents.length,
     securityStaff: securityGuards.length
   };
@@ -53,8 +227,7 @@ const AdminDashboard = ({
     return dateB - dateA;
   });
 
-  const insideVisitors = visitors.filter(v => v?.status === "inside");
-  const rejectedVisitors = visitors.filter(v => v?.status === "rejected");
+  const filteredActivities = filterByTime(activityList);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -128,57 +301,118 @@ const AdminDashboard = ({
               <p className="text-sm text-gray-500 mt-1">Complete Society Overview - {adminData?.name || "Rajesh Patel"}</p>
             </div>
             <div className="mt-2 lg:mt-0">
-            <button
-              onClick={onLogout}
-              className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium"
-            >
-              Logout
-            </button>
-          </div>
+              <button
+                onClick={onLogout}
+                className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition">
-            <p className="text-sm text-gray-600 font-medium mb-1">Total Visitors</p>
-            <p className="text-3xl font-bold text-gray-900">{stats.totalVisitors}</p>
+        {/* Stats Cards - Only visible on Overview tab */}
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6">
+            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition">
+              <p className="text-sm text-gray-600 font-medium mb-1">Total Visitors</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.totalVisitors}</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-500 hover:shadow-md transition">
+              <p className="text-sm text-gray-600 font-medium mb-1">Inside Now</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.activeVisitors}</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-500 hover:shadow-md transition">
+              <p className="text-sm text-gray-600 font-medium mb-1">Residents</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.residents}</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500 hover:shadow-md transition">
+              <p className="text-sm text-gray-600 font-medium mb-1">Security Staff</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.securityStaff}</p>
+            </div>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-500 hover:shadow-md transition">
-            <p className="text-sm text-gray-600 font-medium mb-1">Inside Now</p>
-            <p className="text-3xl font-bold text-gray-900">{stats.activeVisitors}</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-500 hover:shadow-md transition">
-            <p className="text-sm text-gray-600 font-medium mb-1">Residents</p>
-            <p className="text-3xl font-bold text-gray-900">{stats.residents}</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500 hover:shadow-md transition">
-            <p className="text-sm text-gray-600 font-medium mb-1">Security Staff</p>
-            <p className="text-3xl font-bold text-gray-900">{stats.securityStaff}</p>
-          </div>
-        </div>
+        )}
 
         {/* Content Area */}
         <div className="p-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <h3 className="text-2xl font-semibold mb-6 text-gray-900">
-              {activeTab === 'overview' && 'Recent Activity'}
-              {activeTab === 'visitors' && `All Visitors (${visitors.length})`}
-              {activeTab === 'approvals' && `Pre-Approved Visitors (${approvals.length})`}
-              {activeTab === 'inside' && `Currently Inside (${insideVisitors.length})`}
-              {activeTab === 'residents' && `Residents (${residents.length})`}
-              {activeTab === 'security' && `Security Staff (${securityGuards.length})`}
-              {activeTab === 'activity' && 'Activity Log'}
-              {activeTab === 'rejected' && `Rejected Visitors (${rejectedVisitors.length})`}
-            </h3>
+            {/* Header with Search and Filter */}
+            <div className="flex flex-col gap-4 mb-6">
+              <h3 className="text-2xl font-semibold text-gray-900">
+                {activeTab === 'overview' && 'Recent Activity'}
+                {activeTab === 'visitors' && `All Visitors (${filteredVisitors.length})`}
+                {activeTab === 'approvals' && `Pre-Approved Visitors (${filteredApprovals.length})`}
+                {activeTab === 'inside' && `Currently Inside (${insideVisitors.length})`}
+                {activeTab === 'residents' && `Residents (${filteredResidents.length})`}
+                {activeTab === 'security' && `Security Staff (${filteredSecurity.length})`}
+                {activeTab === 'activity' && 'Activity Log'}
+                {activeTab === 'rejected' && `Rejected Visitors (${rejectedVisitors.length})`}
+              </h3>
+
+              {/* Search Bar and Filter Row */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Search Bar */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={`Search ${
+                      activeTab === 'residents' ? 'residents by name, flat, or phone' :
+                      activeTab === 'security' ? 'security staff by name, gate, or phone' :
+                      activeTab === 'approvals' ? 'pre-approved visitors by name, flat, or type' :
+                      'visitors by name, flat, or purpose'
+                    }...`}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 bg-white"
+                  />
+                </div>
+
+                {/* Time Filter - Show for visitors, activity, inside, and rejected tabs */}
+                {(['visitors', 'activity', 'inside', 'rejected', 'overview'].includes(activeTab)) && (
+                  <div className="w-full sm:w-64">
+                    <FilterDropdown
+                      options={timeFilterOptions}
+                      value={timeFilter}
+                      onChange={setTimeFilter}
+                      placeholder="Select time range"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Custom Date Range */}
+              {timeFilter === 'custom' && ['visitors', 'activity', 'inside', 'rejected', 'overview'].includes(activeTab) && (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Overview/Activity */}
             {(activeTab === 'overview' || activeTab === 'activity') && (
               <div className="space-y-3">
-                {activityList.length === 0 ? (
+                {filteredActivities.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No activity recorded yet</p>
                 ) : (
-                  activityList.slice(0, 15).map((activity) => (
+                  filteredActivities.slice(0, 15).map((activity) => (
                     <div key={activity.id} className="p-5 bg-gray-50 rounded-lg border border-gray-200">
                       <p className="font-semibold text-gray-900">{activity.action}</p>
                       <p className="text-sm text-gray-600 mt-1">
@@ -196,8 +430,8 @@ const AdminDashboard = ({
             {/* Visitors Table */}
             {activeTab === 'visitors' && (
               <div className="overflow-x-auto">
-                {visitors.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No visitors found</p>
+                {filteredVisitors.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No visitors found for selected time period</p>
                 ) : (
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b">
@@ -206,10 +440,11 @@ const AdminDashboard = ({
                         <th className="p-3 text-left text-sm font-semibold">Flat</th>
                         <th className="p-3 text-left text-sm font-semibold">Purpose</th>
                         <th className="p-3 text-left text-sm font-semibold">Status</th>
+                        <th className="p-3 text-left text-sm font-semibold">Time</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {visitors.map(v => (
+                      {filteredVisitors.map(v => (
                         <tr key={v.id} className="border-b hover:bg-gray-50">
                           <td className="p-3">{v.name}</td>
                           <td className="p-3">{v.flat}</td>
@@ -219,6 +454,7 @@ const AdminDashboard = ({
                               {v.status}
                             </span>
                           </td>
+                          <td className="p-3 text-sm text-gray-600">{v.checkIn || 'N/A'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -230,8 +466,8 @@ const AdminDashboard = ({
             {/* Approvals Table */}
             {activeTab === 'approvals' && (
               <div className="overflow-x-auto">
-                {approvals.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No pre-approved visitors</p>
+                {filteredApprovals.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No pre-approved visitors found</p>
                 ) : (
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b">
@@ -243,7 +479,7 @@ const AdminDashboard = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {approvals.map(a => (
+                      {filteredApprovals.map(a => (
                         <tr key={a.id} className="border-b hover:bg-gray-50">
                           <td className="p-3">{a.name}</td>
                           <td className="p-3">{a.flat}</td>
@@ -265,7 +501,7 @@ const AdminDashboard = ({
             {activeTab === 'inside' && (
               <div className="space-y-3">
                 {insideVisitors.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No visitors currently inside</p>
+                  <p className="text-gray-500 text-center py-8">No visitors currently inside for selected time period</p>
                 ) : (
                   insideVisitors.map(v => (
                     <div key={v.id} className="p-4 bg-green-50 rounded-lg border border-green-200">
@@ -288,8 +524,8 @@ const AdminDashboard = ({
             {/* Residents Table */}
             {activeTab === 'residents' && (
               <div className="overflow-x-auto">
-                {residents.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No residents registered</p>
+                {filteredResidents.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No residents found</p>
                 ) : (
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b">
@@ -300,7 +536,7 @@ const AdminDashboard = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {residents.map(r => (
+                      {filteredResidents.map(r => (
                         <tr key={r.id} className="border-b hover:bg-gray-50">
                           <td className="p-3">{r.name}</td>
                           <td className="p-3">{r.flat}</td>
@@ -316,8 +552,8 @@ const AdminDashboard = ({
             {/* Security Table */}
             {activeTab === 'security' && (
               <div className="overflow-x-auto">
-                {securityGuards.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No security staff registered</p>
+                {filteredSecurity.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No security staff found</p>
                 ) : (
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b">
@@ -328,7 +564,7 @@ const AdminDashboard = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {securityGuards.map(s => (
+                      {filteredSecurity.map(s => (
                         <tr key={s.id} className="border-b hover:bg-gray-50">
                           <td className="p-3">{s.name}</td>
                           <td className="p-3">{s.gate}</td>
@@ -345,7 +581,7 @@ const AdminDashboard = ({
             {activeTab === 'rejected' && (
               <div className="space-y-3">
                 {rejectedVisitors.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No rejected visitors</p>
+                  <p className="text-gray-500 text-center py-8">No rejected visitors for selected time period</p>
                 ) : (
                   rejectedVisitors.map(v => (
                     <div key={v.id} className="p-4 bg-red-50 rounded-lg border border-red-200">
