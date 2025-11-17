@@ -1,24 +1,23 @@
-// src/hooks/useNotifications.js
+// src/hooks/useNotifications.js 
 import { useState, useEffect, useRef } from 'react';
 
 /**
  * Custom hook for managing notifications
- * Prevents duplicate notifications on page refresh by tracking processed notifications
- * Only shows notifications for new events after login
+ * Only shows notifications when explicitly enabled (after initial data load)
  */
 export const useNotificationManager = () => {
   const [notifications, setNotifications] = useState([]);
   const processedNotificationsRef = useRef(new Set());
-  const isInitialLoadRef = useRef(true); // Track if this is initial page load
+  const isEnabledRef = useRef(false); // Track if notifications are enabled
 
   /**
    * Show a notification
    * @param {Object} data - Notification data
    */
   const showNotification = (data) => {
-    // Skip notifications during initial load (page refresh)
-    if (isInitialLoadRef.current) {
-      console.log("⏭️ Skipping notification during initial load:", data.title);
+    // Skip if notifications not yet enabled
+    if (!isEnabledRef.current) {
+      console.log("⏭️ Skipping notification (not enabled yet):", data.title);
       return;
     }
 
@@ -116,13 +115,21 @@ export const useNotificationManager = () => {
   };
 
   /**
-   * Enable notifications after initial load
-   * This prevents showing notifications for existing data on page load
-   * Call this after login is complete
+   * Enable notifications after initial data load
+   * Call this after Firebase data is loaded and tracking is initialized
    */
   const enableNotifications = () => {
-    console.log("✅ Notifications enabled - will show for new events only");
-    isInitialLoadRef.current = false;
+    console.log("✅ Notifications ENABLED - will show for new events");
+    isEnabledRef.current = true;
+  };
+
+  /**
+   * Disable notifications (e.g., on logout)
+   */
+  const disableNotifications = () => {
+    console.log("⏸️ Notifications DISABLED");
+    isEnabledRef.current = false;
+    processedNotificationsRef.current.clear();
   };
 
   // Request notification permission on mount
@@ -138,6 +145,7 @@ export const useNotificationManager = () => {
     showToast,
     dismissNotification,
     clearAll,
-    enableNotifications // Export this so it can be called after login
+    enableNotifications,
+    disableNotifications
   };
 };

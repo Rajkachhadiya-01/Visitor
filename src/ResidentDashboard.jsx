@@ -1,13 +1,9 @@
-// src/ResidentDashboard.jsx - Updated with History Filters
+// src/ResidentDashboard.jsx 
 import React, { useState } from 'react';
-import { Bell, UserPlus, CheckCircle, Clock, Calendar } from 'lucide-react';
+import { Bell, UserPlus, CheckCircle, Clock, Calendar, X } from 'lucide-react';
 
 const SOCIETY_NAME = "Harmony Residency";
 
-/**
- * Resident Dashboard Component
- * Displays visitor management interface for residents
- */
 const ResidentDashboard = ({
   visitors = [],
   approvals = [],
@@ -21,113 +17,206 @@ const ResidentDashboard = ({
   notifications = [],
   onDismissNotification
 }) => {
-  // Filter states for visitor history
-  const [statusFilter, setStatusFilter] = useState('all'); // all, inside, out, other
-  const [timeFilter, setTimeFilter] = useState('today'); // today, yesterday, week, month, custom
+  const [activeStatCard, setActiveStatCard] = useState(null);
+  const [statCardFilter, setStatCardFilter] = useState('all');
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
 
+  // Helper to safely parse Firebase Timestamp
+  const getDateFromItem = (item) => {
+    if (!item) return null;
+    
+    // Check for Firebase Timestamp object
+    if (item.createdAt && typeof item.createdAt === 'object' && item.createdAt.seconds) {
+      return new Date(item.createdAt.seconds * 1000);
+    }
+    
+    // Check for ISO string
+    if (item.createdAt && typeof item.createdAt === 'string') {
+      return new Date(item.createdAt);
+    }
+    
+    // Fallback to checkIn or requestTime
+    if (item.checkIn) return new Date(item.checkIn);
+    if (item.requestTime) return new Date(item.requestTime);
+    
+    return new Date();
+  };
+
+  // Get today's start
+  const getTodayStart = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  };
+
   // Filter visitors for current resident
-  const myVisitors = visitors.filter(v => v.flat === currentResident);
+  const myVisitors = visitors.filter(v => v && v.flat === currentResident);
   const myApprovals = approvals.filter(a =>
+    a &&
     a.flat === currentResident &&
     a.approved &&
     a.status === 'Pre-Approved' &&
     (!a.arrivalStatus || a.arrivalStatus === 'Not Arrived Yet')
   );
-  const pendingVisitors = visitors.filter(v => v.flat === currentResident && v.status === 'pending');
-  const inside = myVisitors.filter(v => v.status === 'inside').length;
+  const pendingVisitors = visitors.filter(v => v && v.flat === currentResident && v.status === 'pending');
+  const insideVisitors = myVisitors.filter(v => v && v.status === 'inside');
   const cancelledApprovals = approvals.filter(a =>
+    a &&
     a.flat === currentResident &&
     (a.status === 'Cancelled' || a.arrivalStatus === 'Expired' || a.arrivalStatus === 'Cancelled by Resident')
   );
 
-  /**
-   * Filter visitors by time range
-   */
-  const filterByTime = (visitorList) => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    return visitorList.filter(v => {
-      const visitorDate = v.createdAt ? new Date(v.createdAt) : new Date();
-      
-      switch (timeFilter) {
-        case 'today':
-          return visitorDate >= today;
-        case 'yesterday':
-          return visitorDate >= yesterday && visitorDate < today;
-        case 'week':
-          const weekAgo = new Date(today);
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          return visitorDate >= weekAgo;
-        case 'month':
-          const monthAgo = new Date(today);
-          monthAgo.setMonth(monthAgo.getMonth() - 1);
-          return visitorDate >= monthAgo;
-        case 'custom':
-          if (customDateRange.start && customDateRange.end) {
-            const start = new Date(customDateRange.start);
-            const end = new Date(customDateRange.end);
-            end.setHours(23, 59, 59, 999);
-            return visitorDate >= start && visitorDate <= end;
-          }
-          return true;
-        default:
-          return true;
-      }
+  // Filter by date range
+  const filterByDateRange = (items) => {
+    if (!customDateRange.start || !customDateRange.end) return items;
+    
+    const start = new Date(customDateRange.start);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(customDateRange.end);
+    end.setHours(23, 59, 59, 999);
+    
+    return items.filter(item => {
+      const itemDate = getDateFromItem(item);
+      return itemDate && itemDate >= start && itemDate <= end;
     });
   };
 
-  /**
-   * Get filtered history based on status and time
-   */
-  const getFilteredHistory = () => {
-    let filtered = [];
-
-    switch (statusFilter) {
-      case 'inside':
-        filtered = myVisitors.filter(v => v.status === 'inside');
-        break;
-      case 'out':
-        filtered = myVisitors.filter(v => v.status === 'out');
-        break;
-      case 'other':
-        filtered = [...myVisitors.filter(v => v.status === 'rejected'), ...cancelledApprovals];
-        break;
-      case 'all':
-      default:
-        filtered = [...myVisitors, ...cancelledApprovals];
-        break;
-    }
-
-    return filterByTime(filtered);
+  // Get today's items
+  const getTodayItems = (items) => {
+    const todayStart = getTodayStart();
+    return items.filter(item => {
+      const itemDate = getDateFromItem(item);
+      return itemDate && itemDate >= todayStart;
+    });
   };
 
-  const filteredHistory = getFilteredHistory();
+  // Get filtered data based on active stat card
+  const getStatCardFilteredData = () => {
+    if (!activeStatCard) return [];
+
+    let baseData = [];
+    
+    if (activeStatCard === 'todayVisitors') {
+      const todayVisitors = getTodayItems(myVisitors);
+
+      switch(statCardFilter) {
+        case 'inside':
+          baseData = todayVisitors.filter(v => v.status === 'inside');
+          break;
+        case 'out':
+          baseData = todayVisitors.filter(v => v.status === 'out');
+          break;
+        case 'preapproval':
+          const todayApprovals = getTodayItems(approvals.filter(a => 
+            a.flat === currentResident && a.status === 'Pre-Approved'
+          ));
+          baseData = todayApprovals;
+          break;
+        case 'custom':
+          baseData = filterByDateRange(myVisitors);
+          break;
+        default:
+          baseData = todayVisitors;
+      }
+    }
+    
+    if (activeStatCard === 'activeApprovals') {
+      switch(statCardFilter) {
+        case 'coming':
+          baseData = myApprovals;
+          break;
+        case 'expired':
+          baseData = cancelledApprovals.filter(a => a.arrivalStatus === 'Expired');
+          break;
+        default:
+          baseData = myApprovals;
+      }
+    }
+    
+    if (activeStatCard === 'currentlyInside') {
+      const todayInside = getTodayItems(insideVisitors);
+
+      if (statCardFilter === 'custom') {
+        baseData = filterByDateRange(insideVisitors);
+      } else {
+        baseData = todayInside;
+      }
+    }
+
+    return baseData;
+  };
+
+  const filteredData = getStatCardFilteredData();
+
+  // Stat card configurations
+  const statCards = [
+    {
+      id: 'todayVisitors',
+      title: "Today's Visitors",
+      value: getTodayItems(myVisitors).length,
+      icon: CheckCircle,
+      color: 'green',
+      filters: [
+        { label: 'All', value: 'all' },
+        { label: 'Inside', value: 'inside' },
+        { label: 'Out', value: 'out' },
+        { label: 'Pre-Approval Coming', value: 'preapproval' },
+        { label: 'Custom Date Range', value: 'custom' }
+      ]
+    },
+    {
+      id: 'activeApprovals',
+      title: 'Active Approvals',
+      value: myApprovals.length,
+      icon: UserPlus,
+      color: 'blue',
+      filters: [
+        { label: 'All Coming', value: 'all' },
+        { label: 'Coming Today', value: 'coming' },
+        { label: 'Expired (24h)', value: 'expired' }
+      ]
+    },
+    {
+      id: 'currentlyInside',
+      title: 'Currently Inside',
+      value: getTodayItems(insideVisitors).length,
+      icon: Clock,
+      color: 'purple',
+      filters: [
+        { label: "Today's Inside", value: 'all' },
+        { label: 'Custom Date Range', value: 'custom' }
+      ]
+    }
+  ];
+
+  const closeStatCardFilter = () => {
+    setActiveStatCard(null);
+    setStatCardFilter('all');
+    setShowCustomDatePicker(false);
+    setCustomDateRange({ start: '', end: '' });
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Header */}
-      <div className="bg-indigo-600 text-white p-6">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
+      <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-4 md:p-6 shadow-lg">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold">{SOCIETY_NAME}</h1>
-            <h2 className="text-xl">Resident Dashboard</h2>
-            <p>Flat {currentResident} - {residentInfo?.name || 'Resident'}</p>
+            <h1 className="text-xl md:text-2xl font-bold">{SOCIETY_NAME}</h1>
+            <h2 className="text-lg md:text-xl">Resident Dashboard</h2>
+            <p className="text-sm md:text-base opacity-90">Flat {currentResident} - {residentInfo?.name || 'Resident'}</p>
           </div>
-          <button onClick={onLogout} className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold">
+          <button onClick={onLogout} className="bg-red-700 text-indigo px-4 py-2 rounded-lg font-semibold hover:bg-indigo-50 transition-all shadow-md">
             Logout
           </button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
         {/* Pending Visitors Alert */}
         {pendingVisitors.length > 0 && (
-          <div className="bg-orange-50 border-l-4 border-orange-400 p-4 mb-6 rounded-lg">
+          <div className="bg-orange-50 border-l-4 border-orange-400 p-4 mb-6 rounded-lg shadow-sm">
             <div className="flex items-center gap-2">
               <Bell className="w-5 h-5 text-orange-600 animate-pulse" />
               <p className="font-semibold text-orange-800">
@@ -138,54 +227,168 @@ const ResidentDashboard = ({
         )}
 
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center gap-3">
-              <div className="bg-green-100 p-3 rounded-lg">
-                <CheckCircle className="w-6 h-6 text-green-600" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
+          {statCards.map(card => {
+            const Icon = card.icon;
+            const isActive = activeStatCard === card.id;
+            
+            return (
+              <div
+                key={card.id}
+                onClick={() => setActiveStatCard(isActive ? null : card.id)}
+                className={`bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all cursor-pointer transform hover:scale-105 ${
+                  isActive ? 'ring-2 ring-indigo-500' : ''
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`bg-${card.color}-100 p-3 rounded-lg`}>
+                    <Icon className={`w-6 h-6 text-${card.color}-600`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-gray-600 text-sm font-medium">{card.title}</p>
+                    <p className="text-3xl font-bold text-gray-900">{card.value}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-gray-600 text-sm">Today's Visitors</p>
-                <p className="text-2xl font-bold">{myVisitors.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <UserPlus className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-gray-600 text-sm">Active Approvals</p>
-                <p className="text-2xl font-bold">{myApprovals.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center gap-3">
-              <div className="bg-purple-100 p-3 rounded-lg">
-                <Clock className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-gray-600 text-sm">Currently Inside</p>
-                <p className="text-2xl font-bold">{inside}</p>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
+
+        {/* Stat Card Filter Panel */}
+        {activeStatCard && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-indigo-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-900">
+                {statCards.find(c => c.id === activeStatCard)?.title} - Detailed View
+              </h3>
+              <button onClick={closeStatCardFilter} className="text-gray-500 hover:text-gray-700">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Filter Options */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {statCards.find(c => c.id === activeStatCard)?.filters.map(filter => (
+                <button
+                  key={filter.value}
+                  onClick={() => {
+                    setStatCardFilter(filter.value);
+                    setShowCustomDatePicker(filter.value === 'custom');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    statCardFilter === filter.value
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Date Picker */}
+            {showCustomDatePicker && (
+              <div className="flex flex-col md:flex-row gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={customDateRange.start}
+                    onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={customDateRange.end}
+                    onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Filtered Results */}
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {filteredData.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No records found for selected filter</p>
+              ) : (
+                filteredData.map(item => {
+                  const isVisitor = item.name && (item.phone || item.purpose);
+                  
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-4 rounded-lg border ${
+                        item.status === 'inside'
+                          ? 'bg-green-50 border-green-200'
+                          : item.status === 'out'
+                          ? 'bg-gray-50 border-gray-200'
+                          : 'bg-blue-50 border-blue-200'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-lg">{item.name}</p>
+                          {isVisitor ? (
+                            <>
+                              <p className="text-sm text-gray-600">Purpose: {item.purpose}</p>
+                              <p className="text-xs text-gray-500">
+                                In: {item.checkIn} {item.checkOut && `| Out: ${item.checkOut}`}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-sm text-gray-600">Pre-Approval • {item.type}</p>
+                              <p className="text-xs text-gray-500">
+                                Code: {item.preApprovalCode} • {item.frequency}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            item.status === 'inside'
+                              ? 'bg-green-100 text-green-700'
+                              : item.status === 'out'
+                              ? 'bg-gray-200 text-gray-800'
+                              : item.status === 'Pre-Approved'
+                              ? 'bg-blue-200 text-blue-700'
+                              : 'bg-red-200 text-red-700'
+                          }`}
+                        >
+                          {item.status === 'inside' ? 'Inside' :
+                           item.status === 'out' ? 'Checked Out' :
+                           item.status === 'Pre-Approved' ? 'Coming' :
+                           item.arrivalStatus || item.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Visitors Waiting for Approval */}
         {pendingVisitors.length > 0 && (
-          <div className="bg-white rounded-xl shadow mb-6">
+          <div className="bg-white rounded-xl shadow-md mb-6">
             <div className="p-6 border-b">
               <h2 className="text-xl font-bold">Visitors Waiting for Approval</h2>
             </div>
             <div className="p-6 space-y-3">
               {pendingVisitors.map(v => (
                 <div key={v.id} className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                  <div className="flex items-center gap-4 mb-3">
+                  <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-3">
                     {v.photo && (
                       <img
                         src={v.photo}
@@ -193,23 +396,23 @@ const ResidentDashboard = ({
                         className="w-16 h-16 rounded-lg object-cover border-2 border-gray-300"
                       />
                     )}
-                    <div>
+                    <div className="flex-1">
                       <p className="font-semibold text-lg">{v.name}</p>
                       <p className="text-sm text-gray-600">Phone: {v.phone}</p>
                       <p className="text-sm text-gray-600">Purpose: {v.purpose}</p>
                       <p className="text-xs text-gray-500">Arrived: {v.checkIn}</p>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col md:flex-row gap-2">
                     <button
                       onClick={() => onApproveVisitor(v.id)}
-                      className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700"
+                      className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-all"
                     >
                       Approve Entry
                     </button>
                     <button
                       onClick={() => onRejectVisitor(v.id)}
-                      className="flex-1 bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700"
+                      className="flex-1 bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 transition-all"
                     >
                       Reject
                     </button>
@@ -221,12 +424,12 @@ const ResidentDashboard = ({
         )}
 
         {/* Pre-Approved Visitors */}
-        <div className="bg-white rounded-xl shadow mb-6">
-          <div className="p-6 border-b flex justify-between items-center">
+        <div className="bg-white rounded-xl shadow-md mb-6">
+          <div className="p-6 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <h2 className="text-xl font-bold">Pre-Approved Visitors</h2>
             <button
               onClick={onAddApproval}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition-all w-full md:w-auto justify-center shadow-md"
             >
               <UserPlus className="w-4 h-4" />
               Add
@@ -242,8 +445,8 @@ const ResidentDashboard = ({
               ) : (
                 myApprovals.map(a => (
                   <div key={a.id} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
+                    <div className="flex flex-col md:flex-row justify-between items-start mb-2 gap-2">
+                      <div className="flex-1">
                         <p className="font-semibold text-lg">{a.name}</p>
                         <p className="text-sm text-gray-600">Type: {a.type}</p>
                         <p className="text-sm text-gray-600">Frequency: {a.frequency}</p>
@@ -278,7 +481,7 @@ const ResidentDashboard = ({
                         </div>
                       </div>
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
                           a.arrivalStatus === 'Arrived at Gate'
                             ? 'bg-green-100 text-green-700'
                             : 'bg-blue-100 text-blue-700'
@@ -289,7 +492,7 @@ const ResidentDashboard = ({
                     </div>
                     <button
                       onClick={() => onCancelApproval(a.id, a.flat)}
-                      className="mt-3 bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full hover:bg-red-700"
+                      className="mt-3 bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-semibold w-full hover:bg-red-700 transition-all"
                     >
                       Cancel
                     </button>
@@ -297,198 +500,6 @@ const ResidentDashboard = ({
                 ))
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Visitor History with Filters */}
-        <div className="bg-white rounded-xl shadow">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-bold mb-4">Visitor History</h2>
-            
-            {/* Status Filter */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              <button
-                onClick={() => setStatusFilter('all')}
-                className={`px-4 py-2 rounded-lg font-medium transition ${
-                  statusFilter === 'all'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setStatusFilter('inside')}
-                className={`px-4 py-2 rounded-lg font-medium transition ${
-                  statusFilter === 'inside'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Inside
-              </button>
-              <button
-                onClick={() => setStatusFilter('out')}
-                className={`px-4 py-2 rounded-lg font-medium transition ${
-                  statusFilter === 'out'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Out
-              </button>
-              <button
-                onClick={() => setStatusFilter('other')}
-                className={`px-4 py-2 rounded-lg font-medium transition ${
-                  statusFilter === 'other'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Other
-              </button>
-            </div>
-
-            {/* Time Filter */}
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => { setTimeFilter('today'); setShowCustomDatePicker(false); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  timeFilter === 'today'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => { setTimeFilter('yesterday'); setShowCustomDatePicker(false); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  timeFilter === 'yesterday'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Yesterday
-              </button>
-              <button
-                onClick={() => { setTimeFilter('week'); setShowCustomDatePicker(false); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  timeFilter === 'week'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                This Week
-              </button>
-              <button
-                onClick={() => { setTimeFilter('month'); setShowCustomDatePicker(false); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  timeFilter === 'month'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                This Month
-              </button>
-              <button
-                onClick={() => { setTimeFilter('custom'); setShowCustomDatePicker(true); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1 ${
-                  timeFilter === 'custom'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                Custom
-              </button>
-            </div>
-
-            {/* Custom Date Picker */}
-            {showCustomDatePicker && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg flex gap-4 items-center">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                  <input
-                    type="date"
-                    value={customDateRange.start}
-                    onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                  <input
-                    type="date"
-                    value={customDateRange.end}
-                    onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-6 space-y-3">
-            {filteredHistory.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No records found</p>
-            ) : (
-              filteredHistory.map(item => {
-                // Check if item is a visitor or approval
-                const isVisitor = item.name && item.phone;
-                
-                return (
-                  <div
-                    key={item.id}
-                    className={`flex justify-between items-center p-4 rounded-lg ${
-                      item.status === 'inside'
-                        ? 'bg-green-50'
-                        : item.status === 'out'
-                        ? 'bg-gray-50'
-                        : 'bg-red-50'
-                    }`}
-                  >
-                    <div>
-                      <p className="font-semibold">{item.name}</p>
-                      {isVisitor ? (
-                        <>
-                          <p className="text-sm text-gray-600">Purpose: {item.purpose}</p>
-                          <p className="text-xs text-gray-500">
-                            In: {item.checkIn} {item.checkOut && `| Out: ${item.checkOut}`}
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-sm text-gray-600">Pre-Approval</p>
-                          <p className="text-xs text-gray-500">
-                            Code: {item.preApprovalCode} • {item.cancelledAt ? `Cancelled: ${item.cancelledAt}` : 'Expired'}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        item.status === 'inside'
-                          ? 'bg-green-100 text-green-700'
-                          : item.status === 'out'
-                          ? 'bg-gray-200 text-gray-800'
-                          : 'bg-red-200 text-red-700'
-                      }`}
-                    >
-                      {item.status === 'inside'
-                        ? 'Inside'
-                        : item.status === 'out'
-                        ? 'Checked Out'
-                        : item.arrivalStatus === 'Expired'
-                        ? 'Expired'
-                        : item.status === 'rejected'
-                        ? 'Rejected'
-                        : 'Cancelled'}
-                    </span>
-                  </div>
-                );
-              })
-            )}
           </div>
         </div>
       </div>
@@ -499,7 +510,7 @@ const ResidentDashboard = ({
           {notifications.map((notification) => (
             <div
               key={notification.id}
-              className="bg-white rounded-lg shadow-2xl border-l-4 border-orange-500 p-4 w-96"
+              className="bg-white rounded-lg shadow-2xl border-l-4 border-orange-500 p-4 w-96 animate-slide-in"
             >
               <div className="flex items-start gap-3">
                 <div className="bg-orange-100 p-2 rounded-full flex-shrink-0">

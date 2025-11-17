@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Users, Activity, UserPlus, Shield, Menu, Home, ClipboardList, 
-  UserCheck, Ban, X, Filter, Search
+  UserCheck, Ban, X, Filter, Search, Calendar
 } from 'lucide-react';
 
 const SOCIETY_NAME = "Harmony Residency";
@@ -158,7 +158,28 @@ const AdminDashboard = ({
     { label: 'Custom Range', value: 'custom' }
   ];
 
-  // Filter visitors by time
+  // Helper to safely parse Firebase Timestamp
+  const getDateFromItem = (item) => {
+    if (!item) return null;
+    
+    // Check for Firebase Timestamp object
+    if (item.createdAt && typeof item.createdAt === 'object' && item.createdAt.seconds) {
+      return new Date(item.createdAt.seconds * 1000);
+    }
+    
+    // Check for ISO string
+    if (item.createdAt && typeof item.createdAt === 'string') {
+      return new Date(item.createdAt);
+    }
+    
+    // Fallback to other date fields
+    const dateStr = item.checkIn || item.requestTime || item.timestamp;
+    if (dateStr) return new Date(dateStr);
+    
+    return null;
+  };
+
+  // Filter by time - FIXED VERSION with Firebase Timestamp support
   const filterByTime = (items) => {
     if (timeFilter === 'all') return items;
 
@@ -171,7 +192,8 @@ const AdminDashboard = ({
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     return items.filter(item => {
-      const itemDate = new Date(item.checkIn || item.createdAt || item.timestamp || 0);
+      const itemDate = getDateFromItem(item);
+      if (!itemDate) return false;
       
       switch(timeFilter) {
         case 'today':
@@ -185,6 +207,7 @@ const AdminDashboard = ({
         case 'custom':
           if (customStartDate && customEndDate) {
             const start = new Date(customStartDate);
+            start.setHours(0, 0, 0, 0);
             const end = new Date(customEndDate);
             end.setHours(23, 59, 59, 999);
             return itemDate >= start && itemDate <= end;
@@ -196,41 +219,66 @@ const AdminDashboard = ({
     });
   };
 
-  // Filter by search query
+  // Filter by search query - FIXED VERSION
   const filterBySearch = (items, fields) => {
     if (!searchQuery.trim()) return items;
     const query = searchQuery.toLowerCase();
     return items.filter(item => 
-      fields.some(field => 
-        String(item[field] || '').toLowerCase().includes(query)
-      )
+      fields.some(field => {
+        const value = item[field];
+        return value && String(value).toLowerCase().includes(query);
+      })
     );
   };
 
-  const filteredVisitors = filterBySearch(filterByTime(visitors), ['name', 'flat', 'purpose', 'status']);
-  const filteredApprovals = filterBySearch(approvals, ['name', 'flat', 'type', 'status']);
-  const insideVisitors = filterBySearch(filterByTime(visitors), ['name', 'flat', 'purpose']).filter(v => v?.status === "inside");
-  const rejectedVisitors = filterBySearch(filterByTime(visitors), ['name', 'flat', 'purpose']).filter(v => v?.status === "rejected");
+  // Apply both filters properly
+  const getFilteredData = (data, searchFields) => {
+    let filtered = data;
+    
+    // First apply time filter
+    if (['visitors', 'inside', 'rejected', 'activity', 'overview'].includes(activeTab)) {
+      filtered = filterByTime(filtered);
+    }
+    
+    // Then apply search filter
+    filtered = filterBySearch(filtered, searchFields);
+    
+    return filtered;
+  };
+
+  // Get filtered data for each tab
+  const filteredVisitors = getFilteredData(visitors, ['name', 'flat', 'purpose', 'status', 'phone']);
+  const filteredApprovals = getFilteredData(approvals, ['name', 'flat', 'type', 'status', 'contactNumber']);
+  const insideVisitors = getFilteredData(visitors.filter(v => v?.status === "inside"), ['name', 'flat', 'purpose', 'phone']);
+  const rejectedVisitors = getFilteredData(visitors.filter(v => v?.status === "rejected"), ['name', 'flat', 'purpose', 'phone']);
   const filteredResidents = filterBySearch(residents, ['name', 'flat', 'mobile']);
   const filteredSecurity = filterBySearch(securityGuards, ['name', 'gate', 'mobile']);
+  const filteredActivities = filterByTime(activities).sort((a, b) => {
+    const dateA = getDateFromItem(a) || new Date(0);
+    const dateB = getDateFromItem(b) || new Date(0);
+    return dateB - dateA;
+  });
+
+  // Calculate stats for today only - FIXED with Firebase Timestamp support
+  const getTodayCount = (items) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return items.filter(item => {
+      const itemDate = getDateFromItem(item);
+      return itemDate && itemDate >= today;
+    }).length;
+  };
 
   const stats = {
-    totalVisitors: filteredVisitors.length,
-    activeVisitors: insideVisitors.length,
+    totalVisitors: getTodayCount(visitors),
+    activeVisitors: getTodayCount(visitors.filter(v => v.status === 'inside')),
     residents: residents.length,
     securityStaff: securityGuards.length
   };
 
-  const activityList = (activities || []).sort((a, b) => {
-    const dateA = new Date(a.createdAt || a.timestamp || 0);
-    const dateB = new Date(b.createdAt || b.timestamp || 0);
-    return dateB - dateA;
-  });
-
-  const filteredActivities = filterByTime(activityList);
-
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Mobile Menu Button */}
       <button
         onClick={() => setSidebarOpen(true)}
@@ -283,7 +331,7 @@ const AdminDashboard = ({
           <div className="mt-8 pt-6 border-t border-indigo-600">
             <button
               onClick={onLogout}
-              className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium"
+              className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium shadow-md"
             >
               Logout
             </button>
@@ -294,39 +342,37 @@ const AdminDashboard = ({
       {/* Main Content */}
       <div className="flex-1 min-w-0 lg:ml-0">
         {/* Header */}
-        <div className="bg-white shadow-sm p-6 border-b sticky top-0 z-30">
+        <div className="bg-white shadow-sm p-4 md:p-6 border-b sticky top-0 z-30">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
               <p className="text-sm text-gray-500 mt-1">Complete Society Overview - {adminData?.name || "Rajesh Patel"}</p>
             </div>
-            <div className="mt-2 lg:mt-0">
-              <button
-                onClick={onLogout}
-                className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium"
-              >
-                Logout
-              </button>
-            </div>
+            <button
+              onClick={onLogout}
+              className="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium shadow-md"
+            >
+              Logout
+            </button>
           </div>
         </div>
 
         {/* Stats Cards - Only visible on Overview tab */}
         {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500 hover:shadow-md transition">
-              <p className="text-sm text-gray-600 font-medium mb-1">Total Visitors</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 p-4 md:p-6">
+            <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-500 hover:shadow-lg transition">
+              <p className="text-sm text-gray-600 font-medium mb-1">Total Visitors Today</p>
               <p className="text-3xl font-bold text-gray-900">{stats.totalVisitors}</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-500 hover:shadow-md transition">
-              <p className="text-sm text-gray-600 font-medium mb-1">Inside Now</p>
+            <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-green-500 hover:shadow-lg transition">
+              <p className="text-sm text-gray-600 font-medium mb-1">Inside Now (Today)</p>
               <p className="text-3xl font-bold text-gray-900">{stats.activeVisitors}</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-500 hover:shadow-md transition">
-              <p className="text-sm text-gray-600 font-medium mb-1">Residents</p>
+            <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-purple-500 hover:shadow-lg transition">
+              <p className="text-sm text-gray-600 font-medium mb-1">Total Residents</p>
               <p className="text-3xl font-bold text-gray-900">{stats.residents}</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500 hover:shadow-md transition">
+            <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-orange-500 hover:shadow-lg transition">
               <p className="text-sm text-gray-600 font-medium mb-1">Security Staff</p>
               <p className="text-3xl font-bold text-gray-900">{stats.securityStaff}</p>
             </div>
@@ -334,18 +380,18 @@ const AdminDashboard = ({
         )}
 
         {/* Content Area */}
-        <div className="p-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="p-4 md:p-6">
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 md:p-8">
             {/* Header with Search and Filter */}
             <div className="flex flex-col gap-4 mb-6">
-              <h3 className="text-2xl font-semibold text-gray-900">
+              <h3 className="text-xl md:text-2xl font-semibold text-gray-900">
                 {activeTab === 'overview' && 'Recent Activity'}
                 {activeTab === 'visitors' && `All Visitors (${filteredVisitors.length})`}
                 {activeTab === 'approvals' && `Pre-Approved Visitors (${filteredApprovals.length})`}
                 {activeTab === 'inside' && `Currently Inside (${insideVisitors.length})`}
                 {activeTab === 'residents' && `Residents (${filteredResidents.length})`}
                 {activeTab === 'security' && `Security Staff (${filteredSecurity.length})`}
-                {activeTab === 'activity' && 'Activity Log'}
+                {activeTab === 'activity' && `Activity Log (${filteredActivities.length})`}
                 {activeTab === 'rejected' && `Rejected Visitors (${rejectedVisitors.length})`}
               </h3>
 
@@ -368,7 +414,7 @@ const AdminDashboard = ({
                   />
                 </div>
 
-                {/* Time Filter - Show for visitors, activity, inside, and rejected tabs */}
+                {/* Time Filter */}
                 {(['visitors', 'activity', 'inside', 'rejected', 'overview'].includes(activeTab)) && (
                   <div className="w-full sm:w-64">
                     <FilterDropdown
@@ -383,9 +429,12 @@ const AdminDashboard = ({
 
               {/* Custom Date Range */}
               {timeFilter === 'custom' && ['visitors', 'activity', 'inside', 'rejected', 'overview'].includes(activeTab) && (
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 rounded-lg">
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Start Date
+                    </label>
                     <input
                       type="date"
                       value={customStartDate}
@@ -394,7 +443,10 @@ const AdminDashboard = ({
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      End Date
+                    </label>
                     <input
                       type="date"
                       value={customEndDate}
@@ -406,32 +458,33 @@ const AdminDashboard = ({
               )}
             </div>
 
-            {/* Overview/Activity */}
-            {(activeTab === 'overview' || activeTab === 'activity') && (
-              <div className="space-y-3">
-                {filteredActivities.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No activity recorded yet</p>
-                ) : (
-                  filteredActivities.slice(0, 15).map((activity) => (
-                    <div key={activity.id} className="p-5 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="font-semibold text-gray-900">{activity.action}</p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {activity.performedBy} • {activity.visitorName} • {activity.flat}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {activity.timestamp || 'N/A'} • {activity.date}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+            {/* Content Display */}
+            <div className="overflow-x-auto">
+              {/* Overview/Activity */}
+              {(activeTab === 'overview' || activeTab === 'activity') && (
+                <div className="space-y-3">
+                  {filteredActivities.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">No activity recorded for selected time period</p>
+                  ) : (
+                    filteredActivities.slice(0, activeTab === 'overview' ? 15 : undefined).map((activity) => (
+                      <div key={activity.id} className="p-5 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition">
+                        <p className="font-semibold text-gray-900">{activity.action}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {activity.performedBy} • {activity.visitorName} • {activity.flat}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {activity.timestamp || 'N/A'} • {activity.date}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
 
-            {/* Visitors Table */}
-            {activeTab === 'visitors' && (
-              <div className="overflow-x-auto">
-                {filteredVisitors.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No visitors found for selected time period</p>
+              {/* Visitors Table */}
+              {activeTab === 'visitors' && (
+                filteredVisitors.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No visitors found for selected criteria</p>
                 ) : (
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b">
@@ -459,14 +512,12 @@ const AdminDashboard = ({
                       ))}
                     </tbody>
                   </table>
-                )}
-              </div>
-            )}
+                )
+              )}
 
-            {/* Approvals Table */}
-            {activeTab === 'approvals' && (
-              <div className="overflow-x-auto">
-                {filteredApprovals.length === 0 ? (
+              {/* Approvals Table */}
+              {activeTab === 'approvals' && (
+                filteredApprovals.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No pre-approved visitors found</p>
                 ) : (
                   <table className="w-full">
@@ -493,38 +544,36 @@ const AdminDashboard = ({
                       ))}
                     </tbody>
                   </table>
-                )}
-              </div>
-            )}
+                )
+              )}
 
-            {/* Inside Now */}
-            {activeTab === 'inside' && (
-              <div className="space-y-3">
-                {insideVisitors.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No visitors currently inside for selected time period</p>
-                ) : (
-                  insideVisitors.map(v => (
-                    <div key={v.id} className="p-4 bg-green-50 rounded-lg border border-green-200">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold text-lg">{v.name}</p>
-                          <p className="text-sm text-gray-600">Flat: {v.flat} • {v.purpose}</p>
-                          <p className="text-xs text-gray-500">Check-in: {v.checkIn}</p>
+              {/* Inside Now */}
+              {activeTab === 'inside' && (
+                <div className="space-y-3">
+                  {insideVisitors.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">No visitors currently inside for selected criteria</p>
+                  ) : (
+                    insideVisitors.map(v => (
+                      <div key={v.id} className="p-4 bg-green-50 rounded-lg border border-green-200 hover:bg-green-100 transition">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-semibold text-lg">{v.name}</p>
+                            <p className="text-sm text-gray-600">Flat: {v.flat} • {v.purpose}</p>
+                            <p className="text-xs text-gray-500">Check-in: {v.checkIn}</p>
+                          </div>
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                            Inside
+                          </span>
                         </div>
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                          Inside
-                        </span>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+                    ))
+                  )}
+                </div>
+              )}
 
-            {/* Residents Table */}
-            {activeTab === 'residents' && (
-              <div className="overflow-x-auto">
-                {filteredResidents.length === 0 ? (
+              {/* Residents Table */}
+              {activeTab === 'residents' && (
+                filteredResidents.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No residents found</p>
                 ) : (
                   <table className="w-full">
@@ -545,14 +594,12 @@ const AdminDashboard = ({
                       ))}
                     </tbody>
                   </table>
-                )}
-              </div>
-            )}
+                )
+              )}
 
-            {/* Security Table */}
-            {activeTab === 'security' && (
-              <div className="overflow-x-auto">
-                {filteredSecurity.length === 0 ? (
+              {/* Security Table */}
+              {activeTab === 'security' && (
+                filteredSecurity.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No security staff found</p>
                 ) : (
                   <table className="w-full">
@@ -573,33 +620,33 @@ const AdminDashboard = ({
                       ))}
                     </tbody>
                   </table>
-                )}
-              </div>
-            )}
+                )
+              )}
 
-            {/* Rejected Visitors */}
-            {activeTab === 'rejected' && (
-              <div className="space-y-3">
-                {rejectedVisitors.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No rejected visitors for selected time period</p>
-                ) : (
-                  rejectedVisitors.map(v => (
-                    <div key={v.id} className="p-4 bg-red-50 rounded-lg border border-red-200">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold text-lg">{v.name}</p>
-                          <p className="text-sm text-gray-600">Flat: {v.flat} • {v.purpose}</p>
-                          <p className="text-xs text-gray-500">Rejected at: {v.checkIn}</p>
+              {/* Rejected Visitors */}
+              {activeTab === 'rejected' && (
+                <div className="space-y-3">
+                  {rejectedVisitors.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">No rejected visitors for selected criteria</p>
+                  ) : (
+                    rejectedVisitors.map(v => (
+                      <div key={v.id} className="p-4 bg-red-50 rounded-lg border border-red-200 hover:bg-red-100 transition">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-semibold text-lg">{v.name}</p>
+                            <p className="text-sm text-gray-600">Flat: {v.flat} • {v.purpose}</p>
+                            <p className="text-xs text-gray-500">Rejected at: {v.checkIn}</p>
+                          </div>
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 text-red-700">
+                            Rejected
+                          </span>
                         </div>
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 text-red-700">
-                          Rejected
-                        </span>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

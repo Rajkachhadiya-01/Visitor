@@ -1,4 +1,4 @@
-// src/VisitorApp.jsx - Complete with All Fixes
+// src/VisitorApp.jsx 
 import React, { useState, useRef, useEffect } from 'react';
 import { Users, Shield, Home, Camera } from 'lucide-react';
 import { 
@@ -24,7 +24,6 @@ import { loadData } from './utils/storage';
 
 /**
  * Generate 6-digit unique verification code
- * @returns {string} 6-digit verification code
  */
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -109,10 +108,6 @@ const defaultAdmins = [
 ];
 
 // ==================== LOGIN SCREEN ====================
-/**
- * LoginScreen Component - Handles user authentication
- * @param {Function} onLogin - Callback when login is successful
- */
 const LoginScreen = ({ onLogin }) => {
   const [userType, setUserType] = useState(null);
   const [step, setStep] = useState('select');
@@ -132,9 +127,6 @@ const LoginScreen = ({ onLogin }) => {
   const securityGuards = loadData('securityGuards', defaultGuards);
   const admins = loadData('admins', defaultAdmins);
 
-  /**
-   * Handle OTP sending
-   */
   const handleSendOtp = () => {
     if (mobile.length !== 10) {
       setNotice({ type: 'error', text: 'Please enter a valid 10 digit mobile number' });
@@ -157,9 +149,6 @@ const LoginScreen = ({ onLogin }) => {
     setNotice({ type: '', text: '' });
   };
 
-  /**
-   * Handle OTP verification
-   */
   const handleVerifyOtp = () => {
     if (otp === '1234') {
       if (userType === 'resident') {
@@ -293,11 +282,6 @@ const LoginScreen = ({ onLogin }) => {
     </div>
   );
 };
-
-// Continue with CheckInForm, AddApprovalForm, SearchView, and Main App in next message due to length...
-// The remaining components will be in the next artifact
-
-// Part 2: Check-In Form, Add Approval Form, and Search View
 
 // ==================== CHECK-IN FORM ====================
 const CheckInForm = ({ onSubmit, onCancel, residents }) => {
@@ -651,20 +635,10 @@ const AddApprovalForm = ({ onSubmit, onCancel }) => {
 };
 
 // ==================== SEARCH VIEW ====================
-// Fixed SearchView Component - Add this to your VisitorApp.jsx
-
-/**
- * SearchView Component
- * Allows security to search and manage visitors and pre-approvals
- */
 const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrived, showToast }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('visitors');
 
-  /**
-   * Filter visitors based on search term
-   * Safely handles undefined/null values
-   */
   const filteredVisitors = visitors.filter(v => {
     if (!v) return false;
     
@@ -682,10 +656,6 @@ const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrive
     );
   });
 
-  /**
-   * Filter pre-approvals based on search term
-   * Excludes already arrived visitors
-   */
   const filteredApprovals = approvals.filter(a => {
     if (!a) return false;
     if (a.status !== 'Pre-Approved' || a.arrivalStatus === 'Arrived at Gate') return false;
@@ -702,19 +672,14 @@ const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrive
     );
   });
 
-  /**
-   * Handle verification code check and allow entry
-   */
   const handleVerifyCode = (approvalId, enteredCode, preApprovalCode) => {
     if (enteredCode === preApprovalCode) {
       onMarkArrived(approvalId);
       
-      // Show success toast
       if (showToast) {
         showToast('Visitor verified and checked in successfully!', 'success');
       }
     } else {
-      // Show error toast
       if (showToast) {
         showToast('❌ Invalid Code - The verification code does not match.', 'error');
       }
@@ -731,7 +696,6 @@ const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrive
         <div className="bg-white rounded-xl shadow p-8">
           <h2 className="text-2xl font-bold mb-6">Search Visitor</h2>
 
-          {/* Tab Switcher */}
           <div className="flex gap-2 mb-6">
             <button
               onClick={() => setActiveTab('visitors')}
@@ -755,7 +719,6 @@ const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrive
             </button>
           </div>
 
-          {/* Search Input */}
           <input
             type="text"
             value={searchTerm}
@@ -764,7 +727,6 @@ const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrive
             placeholder="Search by name, phone, flat, or code..."
           />
 
-          {/* Visitors Tab */}
           {activeTab === 'visitors' && (
             <div className="space-y-3">
               {filteredVisitors.length === 0 ? (
@@ -799,7 +761,6 @@ const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrive
             </div>
           )}
 
-          {/* Pre-Approvals Tab */}
           {activeTab === 'preapprovals' && (
             <div className="space-y-3">
               {filteredApprovals.length === 0 ? (
@@ -853,15 +814,13 @@ const SearchView = ({ visitors, approvals = [], onBack, onCheckOut, onMarkArrive
 };
 
 // ==================== MAIN APP ====================
-// Part 3: Main App Component
-
 export default function VisitorApp() {
-const {
+  const {
     notifications: residentNotifications,
     showNotification: showResidentNotification,
     showToast: showResidentToast,
     dismissNotification: dismissResidentNotification,
-    enableNotifications: enableResidentNotifications  // ✅ ADD THIS LINE
+    // enableNotifications: enableResidentNotifications
   } = useNotificationManager();
 
   const {
@@ -869,16 +828,15 @@ const {
     showNotification: showSecurityNotification,
     showToast: showSecurityToast,
     dismissNotification: dismissSecurityNotification,
-    enableNotifications: enableSecurityNotifications  // ✅ ADD THIS LINE
+    // enableNotifications: enableSecurityNotifications
   } = useNotificationManager();
 
   const {
     notifications: adminNotifications,
     showToast: showAdminToast,
     dismissNotification: dismissAdminNotification,
-    enableNotifications: enableAdminNotifications  // ✅ ADD THIS LINE
+    // enableNotifications: enableAdminNotifications
   } = useNotificationManager();
-
 
   const { user, view, login, logout, setView } = useAuth();
   const [currentResident, setCurrentResident] = useState(null);
@@ -894,56 +852,48 @@ const {
   const [residents] = useState(() => loadData('residents', defaultResidents));
   const [securityGuards] = useState(() => loadData('securityGuards', defaultGuards));
 
-  // Track pending visitors for the current user's flat
-  const prevPendingVisitorsRef = useRef(new Set());
-  const prevPendingApprovalsRef = useRef(new Set());
+// ✅ FIXED: Track fresh login vs page refresh
+  const isFreshLoginRef = useRef(false);
+  const notificationsInitializedRef = useRef(false);
+  // const residentNotificationReadyRef = useRef(false);
+  // const securityNotificationReadyRef = useRef(false);
 
-    // ✅ ADD THIS: Track if login toast was already shown
-  const loginToastShownRef = useRef(false);
-
-  // ✅ FIXED: Login toast now only shows once
+  // ✅ Setup user data and show login toast ONLY on fresh login
   useEffect(() => {
-    if (user && user.role && !loginToastShownRef.current) {
-      // Mark as shown immediately to prevent duplicates
-      loginToastShownRef.current = true;
+    if (user && user.role && isFreshLoginRef.current) {
+      // Reset the flag immediately after showing toast
+      isFreshLoginRef.current = false;
       
       if (user.role === 'resident') {
         setCurrentResident(user.identifier);
         setResidentData(user.data);
         showResidentToast('Login Successful! Welcome back.', 'success');
         
-        setTimeout(() => {
-          enableResidentNotifications();
-          console.log("✅ Resident notifications enabled");
-        }, 1000);
-        
       } else if (user.role === 'security') {
         setSecurityData(user.data);
         showSecurityToast('Login Successful! Welcome back.', 'success');
         
-        setTimeout(() => {
-          enableSecurityNotifications();
-          console.log("✅ Security notifications enabled");
-        }, 1000);
-        
       } else if (user.role === 'admin') {
         setAdminData(user.data);
         showAdminToast('Login Successful! Welcome back.', 'success');
-        
-        setTimeout(() => {
-          enableAdminNotifications();
-          console.log("✅ Admin notifications enabled");
-        }, 1000);
       }
     }
     
-    // Reset the flag when user logs out
-    if (!user) {
-      loginToastShownRef.current = false;
+    // If user exists but isFreshLogin is false, it's a page refresh
+    // Set up the user data but don't show toast
+    if (user && user.role && !isFreshLoginRef.current) {
+      if (user.role === 'resident') {
+        setCurrentResident(user.identifier);
+        setResidentData(user.data);
+      } else if (user.role === 'security') {
+        setSecurityData(user.data);
+      } else if (user.role === 'admin') {
+        setAdminData(user.data);
+      }
     }
-  }, [user, showResidentToast, showSecurityToast, showAdminToast, 
-      enableResidentNotifications, enableSecurityNotifications, enableAdminNotifications]);
+  }, [user, showResidentToast, showSecurityToast, showAdminToast]);
 
+  // Setup Firebase listeners
   useEffect(() => {
     console.log("🔥 Setting up Firebase listeners...");
     
@@ -971,39 +921,60 @@ const {
     };
   }, []);
 
-  // Handle resident notifications for pending visitors
+  // ✅ FIXED: Handle resident notifications - Skip on page refresh
   useEffect(() => {
     if (user && user.role === 'resident' && currentResident && visitors.length > 0) {
       const pendingForThisFlat = visitors.filter(
         v => v.flat === currentResident && v.status === 'pending'
       );
       
-      // Create a Set of current pending visitor IDs
-      const currentPendingIds = new Set(pendingForThisFlat.map(v => v.id));
+      // ✅ On first run (page refresh), just initialize without showing notifications
+      if (!notificationsInitializedRef.current) {
+        const currentPendingIds = new Set(pendingForThisFlat.map(v => v.id));
+        // Store existing pending visitor IDs
+        window.localStorage.setItem(
+          `pending-visitors-${currentResident}`,
+          JSON.stringify([...currentPendingIds])
+        );
+        notificationsInitializedRef.current = true;
+        console.log("✅ Initialized pending visitors (no notifications on refresh)");
+        return;
+      }
       
-      // Find new visitors (not in previous set)
-      const newVisitors = pendingForThisFlat.filter(
-        v => !prevPendingVisitorsRef.current.has(v.id)
+      // ✅ Get previously stored IDs
+      const storedIds = JSON.parse(
+        window.localStorage.getItem(`pending-visitors-${currentResident}`) || '[]'
       );
+      const previousIds = new Set(storedIds);
       
-      // Show notifications for new visitors only
-      newVisitors.forEach(visitor => {
-        showResidentNotification({
-          title: 'Visitor Waiting for Approval!',
-          visitorName: visitor.name,
-          phone: visitor.phone,
-          flat: visitor.flat,
-          purpose: visitor.purpose,
-          type: 'resident'
+      // Find NEW visitors (not in previous set)
+      const newVisitors = pendingForThisFlat.filter(v => !previousIds.has(v.id));
+      
+      // Show notifications only for NEW visitors
+      if (newVisitors.length > 0) {
+        console.log(`🔔 ${newVisitors.length} NEW visitor(s) detected!`);
+        newVisitors.forEach(visitor => {
+          showResidentNotification({
+            title: 'Visitor Waiting for Approval!',
+            visitorName: visitor.name,
+            phone: visitor.phone,
+            flat: visitor.flat,
+            purpose: visitor.purpose,
+            type: 'resident'
+          });
         });
-      });
+      }
       
-      // Update the ref with current IDs
-      prevPendingVisitorsRef.current = currentPendingIds;
+      // Update stored IDs
+      const currentPendingIds = new Set(pendingForThisFlat.map(v => v.id));
+      window.localStorage.setItem(
+        `pending-visitors-${currentResident}`,
+        JSON.stringify([...currentPendingIds])
+      );
     }
   }, [user, currentResident, visitors, showResidentNotification]);
 
-  // Handle security notifications for pre-approved visitors
+  // ✅ FIXED: Handle security notifications - Skip on page refresh
   useEffect(() => {
     if (user && user.role === 'security' && approvals.length > 0) {
       const pendingApprovals = approvals.filter(
@@ -1012,28 +983,49 @@ const {
           (!a.arrivalStatus || a.arrivalStatus === 'Not Arrived Yet')
       );
 
-      // Create a Set of current pending approval IDs
-      const currentPendingIds = new Set(pendingApprovals.map(a => a.id));
+      // ✅ On first run (page refresh), just initialize without showing notifications
+      if (!notificationsInitializedRef.current) {
+        const currentPendingIds = new Set(pendingApprovals.map(a => a.id));
+        // Store existing pending approval IDs
+        window.localStorage.setItem(
+          'pending-approvals-security',
+          JSON.stringify([...currentPendingIds])
+        );
+        notificationsInitializedRef.current = true;
+        console.log("✅ Initialized pending approvals (no notifications on refresh)");
+        return;
+      }
       
-      // Find new approvals (not in previous set)
-      const newApprovals = pendingApprovals.filter(
-        a => !prevPendingApprovalsRef.current.has(a.id)
+      // ✅ Get previously stored IDs
+      const storedIds = JSON.parse(
+        window.localStorage.getItem('pending-approvals-security') || '[]'
       );
-
-      // Show notifications for new approvals only
-      newApprovals.forEach(approval => {
-        showSecurityNotification({
-          title: 'New Pre-Approved Visitor',
-          visitorName: approval.name,
-          phone: approval.contactNumber,
-          flat: approval.flat,
-          purpose: approval.type,
-          type: 'security'
-        });
-      });
+      const previousIds = new Set(storedIds);
       
-      // Update the ref with current IDs
-      prevPendingApprovalsRef.current = currentPendingIds;
+      // Find NEW approvals (not in previous set)
+      const newApprovals = pendingApprovals.filter(a => !previousIds.has(a.id));
+
+      // Show notifications only for NEW approvals
+      if (newApprovals.length > 0) {
+        console.log(`🔔 ${newApprovals.length} NEW pre-approved visitor(s) detected!`);
+        newApprovals.forEach(approval => {
+          showSecurityNotification({
+            title: 'New Pre-Approved Visitor',
+            visitorName: approval.name,
+            phone: approval.contactNumber,
+            flat: approval.flat,
+            purpose: approval.type,
+            type: 'security'
+          });
+        });
+      }
+      
+      // Update stored IDs
+      const currentPendingIds = new Set(pendingApprovals.map(a => a.id));
+      window.localStorage.setItem(
+        'pending-approvals-security',
+        JSON.stringify([...currentPendingIds])
+      );
     }
   }, [user, approvals, showSecurityNotification]);
 
@@ -1109,7 +1101,6 @@ const {
         createdAt: new Date().toISOString()
       });
       
-      // Redirect immediately to security dashboard
       setView('security-dash');
 
     } catch (error) {
@@ -1228,7 +1219,6 @@ const {
         createdAt: new Date().toISOString()
       });
       
-      // Redirect immediately to resident dashboard
       setView('resident-dash');
 
     } catch (error) {
@@ -1333,10 +1323,19 @@ const {
 
   if (view === 'login') {
     return <LoginScreen onLogin={(role, identifier, userData) => {
+      // ✅ SET FLAG TO TRUE FOR ACTUAL FRESH LOGIN
+      isFreshLoginRef.current = true;
+      
+      // ✅ RESET notification initialization on fresh login
+      notificationsInitializedRef.current = false;
+      
+      // ✅ CLEAR localStorage tracking on fresh login
       if (role === 'resident') {
+        window.localStorage.removeItem(`pending-visitors-${identifier}`);
         setCurrentResident(identifier);
         setResidentData(userData);
       } else if (role === 'security') {
+        window.localStorage.removeItem('pending-approvals-security');
         setSecurityData(userData);
       } else if (role === 'admin') {
         setAdminData(userData);
@@ -1414,7 +1413,7 @@ const {
           onBack={() => setView('security-dash')}
           onCheckOut={handleCheckOut}
           onMarkArrived={handleMarkArrived}
-          showToast={showSecurityToast}  // Add this line
+          showToast={showSecurityToast}
         />
       )}
 
