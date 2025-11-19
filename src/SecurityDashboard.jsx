@@ -10,13 +10,12 @@ const SecurityDashboard = ({
   visitors = [],
   approvals = [],
   securityData,
+  firebaseNotifications = [],
   onLogout,
   onCheckIn,
   onSearch,
   onCheckOut,
   onMarkArrived,
-  notifications = [],
-  onDismissNotification
 }) => {
   const [activeStatCard, setActiveStatCard] = useState(null);
   const [statCardFilter, setStatCardFilter] = useState('all');
@@ -226,9 +225,16 @@ const SecurityDashboard = ({
             <h2 className="text-lg md:text-xl">Security Dashboard</h2>
             <p className="text-sm md:text-base opacity-90">{securityData?.name || 'Security'} - {securityData?.gate || 'Main Gate'}</p>
           </div>
-          <button onClick={onLogout} className="bg-red-700 text-gray px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-all shadow-md">
-            Logout
-          </button>
+          
+          {/* Logout Button Only */}
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={onLogout} 
+              className="bg-red-700 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-800 transition-all shadow-md"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
@@ -524,34 +530,6 @@ const SecurityDashboard = ({
           </div>
         )}
       </div>
-
-      {/* Notification Container */}
-      {notifications.length > 0 && (
-        <div className="fixed top-20 right-4 z-50 space-y-3">
-          {notifications.map((notification) => (
-            <div
-              key={notification.id}
-              className="bg-white rounded-lg shadow-2xl border-l-4 border-blue-500 p-4 w-96 animate-slide-in"
-            >
-              <div className="flex items-start gap-3">
-                <div className="bg-blue-100 p-2 rounded-full flex-shrink-0">
-                  <Bell className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-900">{notification.title}</h3>
-                  <p className="text-sm text-gray-600 mt-1">{notification.visitorName}</p>
-                </div>
-                <button
-                  onClick={() => onDismissNotification(notification.id)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

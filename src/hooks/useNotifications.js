@@ -1,26 +1,20 @@
 // src/hooks/useNotifications.js 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
+import { playNotificationSound } from '../VisitorApp';
 
 /**
  * Custom hook for managing notifications
- * Only shows notifications when explicitly enabled (after initial data load)
+ * Shows notifications for 5-6 seconds with sound
  */
 export const useNotificationManager = () => {
   const [notifications, setNotifications] = useState([]);
   const processedNotificationsRef = useRef(new Set());
-  const isEnabledRef = useRef(false); // Track if notifications are enabled
 
   /**
-   * Show a notification
+   * Show a notification (auto-dismiss after 6 seconds)
    * @param {Object} data - Notification data
    */
   const showNotification = (data) => {
-    // Skip if notifications not yet enabled
-    if (!isEnabledRef.current) {
-      console.log("⏭️ Skipping notification (not enabled yet):", data.title);
-      return;
-    }
-
     // Create unique ID based on notification content
     const notificationKey = `${data.type}-${data.visitorName}-${data.flat}-${data.timestamp || Date.now()}`;
     
@@ -51,31 +45,17 @@ export const useNotificationManager = () => {
     console.log("🔔 Showing notification:", newNotification.title);
 
     // Play sound
-    try {
-      const audio = new Audio('/alert.mp3');
-      audio.play().catch(err => console.log('Audio play failed:', err));
-    } catch (err) {
-      console.error('Audio error:', err);
-    }
+    playNotificationSound();
 
-    // Browser notification (if permission granted)
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(data.title || 'Visitor Alert', {
-        body: `${data.visitorName} - Flat ${data.flat}`,
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
-        vibrate: [200, 100, 200]
-      });
-    }
-
-    // Auto dismiss after 8 seconds
+    // Auto dismiss after 6 seconds
     setTimeout(() => {
       dismissNotification(newNotification.id);
-    }, 8000);
+    }, 6000);
   };
 
   /**
    * Show a toast message (green success or red error)
+   * Auto-dismiss after 5 seconds
    * @param {string} message - Message to display
    * @param {string} type - Type of toast (success/error)
    */
@@ -93,10 +73,10 @@ export const useNotificationManager = () => {
 
     setNotifications(prev => [...prev, toastNotification]);
 
-    // Auto dismiss after 3 seconds
+    // Auto dismiss after 5 seconds
     setTimeout(() => {
       dismissNotification(toastNotification.id);
-    }, 3000);
+    }, 5000);
   };
 
   /**
@@ -114,38 +94,11 @@ export const useNotificationManager = () => {
     setNotifications([]);
   };
 
-  /**
-   * Enable notifications after initial data load
-   * Call this after Firebase data is loaded and tracking is initialized
-   */
-  const enableNotifications = () => {
-    console.log("✅ Notifications ENABLED - will show for new events");
-    isEnabledRef.current = true;
-  };
-
-  /**
-   * Disable notifications (e.g., on logout)
-   */
-  const disableNotifications = () => {
-    console.log("⏸️ Notifications DISABLED");
-    isEnabledRef.current = false;
-    processedNotificationsRef.current.clear();
-  };
-
-  // Request notification permission on mount
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-
   return {
     notifications,
     showNotification,
     showToast,
     dismissNotification,
-    clearAll,
-    enableNotifications,
-    disableNotifications
+    clearAll
   };
 };

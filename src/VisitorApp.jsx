@@ -13,6 +13,13 @@ import {
   listenToActivities, 
   uploadVisitorPhoto 
 } from './utils/firebaseService';
+import { 
+  addPreApprovalNotification,
+  addVisitorCheckinNotification,
+  listenToResidentNotifications,
+  listenToSecurityNotifications,
+  markNotificationAsRead
+} from './utils/notificationService';
 import AdminDashboard from './AdminDashboard';
 import SecurityDashboard from './SecurityDashboard';
 import ResidentDashboard from './ResidentDashboard';
@@ -588,7 +595,7 @@ const AddApprovalForm = ({ onSubmit, onCancel }) => {
               <FilterDropdown
                 options={[
                   { label: 'Domestic Help', value: 'Domestic Help' },
-                  { label: 'Service Provider', value: 'Service' },
+                  { label: 'Service Provider', value: 'Service Provider' },
                   { label: 'Guest', value: 'Guest' },
                 ]}
                 value={type}
@@ -820,7 +827,6 @@ export default function VisitorApp() {
     showNotification: showResidentNotification,
     showToast: showResidentToast,
     dismissNotification: dismissResidentNotification,
-    // enableNotifications: enableResidentNotifications
   } = useNotificationManager();
 
   const {
@@ -828,14 +834,12 @@ export default function VisitorApp() {
     showNotification: showSecurityNotification,
     showToast: showSecurityToast,
     dismissNotification: dismissSecurityNotification,
-    // enableNotifications: enableSecurityNotifications
   } = useNotificationManager();
 
   const {
     notifications: adminNotifications,
     showToast: showAdminToast,
     dismissNotification: dismissAdminNotification,
-    // enableNotifications: enableAdminNotifications
   } = useNotificationManager();
 
   const { user, view, login, logout, setView } = useAuth();
@@ -849,19 +853,17 @@ export default function VisitorApp() {
   const [activities, setActivities] = useState([]);
   const [firebaseInitialized, setFirebaseInitialized] = useState(false);
 
+  // Firebase notifications state
+  const [firebaseNotifications, setFirebaseNotifications] = useState([]);
+
   const [residents] = useState(() => loadData('residents', defaultResidents));
   const [securityGuards] = useState(() => loadData('securityGuards', defaultGuards));
 
-// ✅ FIXED: Track fresh login vs page refresh
   const isFreshLoginRef = useRef(false);
-  const notificationsInitializedRef = useRef(false);
-  // const residentNotificationReadyRef = useRef(false);
-  // const securityNotificationReadyRef = useRef(false);
 
-  // ✅ Setup user data and show login toast ONLY on fresh login
+  // Setup user data and show login toast ONLY on fresh login
   useEffect(() => {
     if (user && user.role && isFreshLoginRef.current) {
-      // Reset the flag immediately after showing toast
       isFreshLoginRef.current = false;
       
       if (user.role === 'resident') {
@@ -879,8 +881,6 @@ export default function VisitorApp() {
       }
     }
     
-    // If user exists but isFreshLogin is false, it's a page refresh
-    // Set up the user data but don't show toast
     if (user && user.role && !isFreshLoginRef.current) {
       if (user.role === 'resident') {
         setCurrentResident(user.identifier);
@@ -921,113 +921,65 @@ export default function VisitorApp() {
     };
   }, []);
 
-  // ✅ FIXED: Handle resident notifications - Skip on page refresh
+  // Listen to Firebase notifications for RESIDENT
   useEffect(() => {
-    if (user && user.role === 'resident' && currentResident && visitors.length > 0) {
-      const pendingForThisFlat = visitors.filter(
-        v => v.flat === currentResident && v.status === 'pending'
-      );
+    if (!user || user.role !== 'resident' || !currentResident || !firebaseInitialized) return;
+
+    console.log(`📬 Setting up Firebase notification listener for Flat ${currentResident}`);
+    
+    const unsubscribe = listenToResidentNotifications(currentResident, (notifications) => {
+      console.log(`📬 Resident (Flat ${currentResident}) received ${notifications.length} unread notifications from Firebase`);
       
-      // ✅ On first run (page refresh), just initialize without showing notifications
-      if (!notificationsInitializedRef.current) {
-        const currentPendingIds = new Set(pendingForThisFlat.map(v => v.id));
-        // Store existing pending visitor IDs
-        window.localStorage.setItem(
-          `pending-visitors-${currentResident}`,
-          JSON.stringify([...currentPendingIds])
-        );
-        notificationsInitializedRef.current = true;
-        console.log("✅ Initialized pending visitors (no notifications on refresh)");
-        return;
-      }
+      setFirebaseNotifications(notifications);
       
-      // ✅ Get previously stored IDs
-      const storedIds = JSON.parse(
-        window.localStorage.getItem(`pending-visitors-${currentResident}`) || '[]'
-      );
-      const previousIds = new Set(storedIds);
-      
-      // Find NEW visitors (not in previous set)
-      const newVisitors = pendingForThisFlat.filter(v => !previousIds.has(v.id));
-      
-      // Show notifications only for NEW visitors
-      if (newVisitors.length > 0) {
-        console.log(`🔔 ${newVisitors.length} NEW visitor(s) detected!`);
-        newVisitors.forEach(visitor => {
+      // Show toast notifications for unread notifications
+      notifications.forEach(notification => {
+        if (notification.status === true) {
           showResidentNotification({
             title: 'Visitor Waiting for Approval!',
-            visitorName: visitor.name,
-            phone: visitor.phone,
-            flat: visitor.flat,
-            purpose: visitor.purpose,
-            type: 'resident'
+            visitorName: notification.visitorName,
+            phone: notification.mobileNumber,
+            flat: notification.flatNumber,
+            purpose: notification.purpose,
+            type: 'resident',
+            timestamp: notification.receivedTime
           });
-        });
-      }
-      
-      // Update stored IDs
-      const currentPendingIds = new Set(pendingForThisFlat.map(v => v.id));
-      window.localStorage.setItem(
-        `pending-visitors-${currentResident}`,
-        JSON.stringify([...currentPendingIds])
-      );
-    }
-  }, [user, currentResident, visitors, showResidentNotification]);
+        }
+      });
+    });
 
-  // ✅ FIXED: Handle security notifications - Skip on page refresh
+    return () => unsubscribe();
+  }, [user, currentResident, firebaseInitialized, showResidentNotification]);
+
+  // Listen to Firebase notifications for SECURITY
   useEffect(() => {
-    if (user && user.role === 'security' && approvals.length > 0) {
-      const pendingApprovals = approvals.filter(
-        a =>
-          a.status === 'Pre-Approved' &&
-          (!a.arrivalStatus || a.arrivalStatus === 'Not Arrived Yet')
-      );
+    if (!user || user.role !== 'security' || !firebaseInitialized) return;
 
-      // ✅ On first run (page refresh), just initialize without showing notifications
-      if (!notificationsInitializedRef.current) {
-        const currentPendingIds = new Set(pendingApprovals.map(a => a.id));
-        // Store existing pending approval IDs
-        window.localStorage.setItem(
-          'pending-approvals-security',
-          JSON.stringify([...currentPendingIds])
-        );
-        notificationsInitializedRef.current = true;
-        console.log("✅ Initialized pending approvals (no notifications on refresh)");
-        return;
-      }
+    console.log(`🛡️ Setting up Firebase notification listener for Security`);
+    
+    const unsubscribe = listenToSecurityNotifications((notifications) => {
+      console.log(`🛡️ Security received ${notifications.length} unread notifications from Firebase`);
       
-      // ✅ Get previously stored IDs
-      const storedIds = JSON.parse(
-        window.localStorage.getItem('pending-approvals-security') || '[]'
-      );
-      const previousIds = new Set(storedIds);
+      setFirebaseNotifications(notifications);
       
-      // Find NEW approvals (not in previous set)
-      const newApprovals = pendingApprovals.filter(a => !previousIds.has(a.id));
-
-      // Show notifications only for NEW approvals
-      if (newApprovals.length > 0) {
-        console.log(`🔔 ${newApprovals.length} NEW pre-approved visitor(s) detected!`);
-        newApprovals.forEach(approval => {
+      // Show toast notifications for unread pre-approvals
+      notifications.forEach(notification => {
+        if (notification.status === true) {
           showSecurityNotification({
             title: 'New Pre-Approved Visitor',
-            visitorName: approval.name,
-            phone: approval.contactNumber,
-            flat: approval.flat,
-            purpose: approval.type,
-            type: 'security'
+            visitorName: notification.visitorName,
+            phone: notification.mobileNumber,
+            flat: notification.flatNumber,
+            purpose: notification.type,
+            type: 'security',
+            timestamp: notification.receivedTime
           });
-        });
-      }
-      
-      // Update stored IDs
-      const currentPendingIds = new Set(pendingApprovals.map(a => a.id));
-      window.localStorage.setItem(
-        'pending-approvals-security',
-        JSON.stringify([...currentPendingIds])
-      );
-    }
-  }, [user, approvals, showSecurityNotification]);
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [user, firebaseInitialized, showSecurityNotification]);
 
   // Auto-cancel expired approvals
   useEffect(() => {
@@ -1090,6 +1042,14 @@ export default function VisitorApp() {
 
       await addVisitor(newVisitor);
 
+      // ✅ CREATE FIREBASE NOTIFICATION FOR RESIDENT
+      const resident = residents.find(r => r.flat === data.flat);
+      const ownerName = resident ? resident.name : 'Resident';
+      
+      await addVisitorCheckinNotification(data, ownerName);
+      
+      console.log("✅ Visitor checked in and notification sent to resident");
+
       await addActivity({
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         action: 'Visitor Check-In Requested',
@@ -1101,11 +1061,12 @@ export default function VisitorApp() {
         createdAt: new Date().toISOString()
       });
       
+      showSecurityToast('Visitor checked in successfully! Notification sent to resident.', 'success');
       setView('security-dash');
 
     } catch (error) {
       console.error("❌ Error checking in visitor:", error);
-      alert("Failed to check in visitor. Please try again.");
+      showSecurityToast('Failed to check in visitor. Please try again.', 'error');
     }
   };
 
@@ -1118,6 +1079,16 @@ export default function VisitorApp() {
         approvalStatus: 'approved'
       });
       
+      // ✅ MARK FIREBASE NOTIFICATION AS READ
+      const notification = firebaseNotifications.find(
+        n => n.visitorName === visitor.name && n.flatNumber === currentResident
+      );
+      
+      if (notification) {
+        await markNotificationAsRead(notification.id);
+        console.log("✅ Notification marked as read in Firebase");
+      }
+      
       if (visitor) {
         await addActivity({
           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
@@ -1129,9 +1100,11 @@ export default function VisitorApp() {
           date: new Date().toLocaleDateString()
         });
       }
+      
+      showResidentToast('Visitor approved successfully!', 'success');
     } catch (error) {
       console.error("❌ Error approving visitor:", error);
-      alert('Failed to approve visitor. Please try again.');
+      showResidentToast('Failed to approve visitor. Please try again.', 'error');
     }
   };
 
@@ -1144,6 +1117,16 @@ export default function VisitorApp() {
         approvalStatus: 'rejected'
       });
       
+      // ✅ MARK FIREBASE NOTIFICATION AS READ
+      const notification = firebaseNotifications.find(
+        n => n.visitorName === visitor.name && n.flatNumber === currentResident
+      );
+      
+      if (notification) {
+        await markNotificationAsRead(notification.id);
+        console.log("✅ Notification marked as read in Firebase");
+      }
+      
       if (visitor) {
         await addActivity({
           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
@@ -1155,9 +1138,11 @@ export default function VisitorApp() {
           date: new Date().toLocaleDateString()
         });
       }
+      
+      showResidentToast('Visitor rejected.', 'success');
     } catch (error) {
       console.error("❌ Error rejecting visitor:", error);
-      alert('Failed to reject visitor. Please try again.');
+      showResidentToast('Failed to reject visitor. Please try again.', 'error');
     }
   };
 
@@ -1181,9 +1166,11 @@ export default function VisitorApp() {
           date: new Date().toLocaleDateString()
         });
       }
+      
+      showSecurityToast('Visitor checked out successfully!', 'success');
     } catch (error) {
       console.error("❌ Error checking out visitor:", error);
-      alert("Failed to check out visitor. Please try again.");
+      showSecurityToast('Failed to check out visitor. Please try again.', 'error');
     }
   };
 
@@ -1208,6 +1195,16 @@ export default function VisitorApp() {
 
       await addApproval(newApproval);
 
+      // ✅ CREATE FIREBASE NOTIFICATION FOR SECURITY
+      await addPreApprovalNotification({
+        name: data.name,
+        contactNumber: data.contactNumber,
+        flat: currentResident,
+        type: data.type
+      });
+      
+      console.log("✅ Pre-approval added and notification sent to security");
+
       await addActivity({
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         action: 'Pre-Approved Visitor Added',
@@ -1219,11 +1216,12 @@ export default function VisitorApp() {
         createdAt: new Date().toISOString()
       });
       
+      showResidentToast('Pre-approval added successfully! Security has been notified.', 'success');
       setView('resident-dash');
 
     } catch (error) {
       console.error("❌ Error adding approval:", error);
-      alert('Failed to add approval. Please try again.');
+      showResidentToast('Failed to add approval. Please try again.', 'error');
     }
   };
 
@@ -1250,9 +1248,11 @@ export default function VisitorApp() {
           date: new Date().toLocaleDateString()
         });
       }
+      
+      showResidentToast('Pre-approval cancelled successfully.', 'success');
     } catch (error) {
       console.error("❌ Error cancelling approval:", error);
-      alert('Failed to cancel approval. Please try again.');
+      showResidentToast('Failed to cancel approval. Please try again.', 'error');
     }
   };
 
@@ -1280,6 +1280,16 @@ export default function VisitorApp() {
       
       await addVisitor(newVisitor);
       
+      // ✅ MARK FIREBASE NOTIFICATION AS READ
+      const notification = firebaseNotifications.find(
+        n => n.visitorName === approval.name && n.flatNumber === approval.flat
+      );
+      
+      if (notification) {
+        await markNotificationAsRead(notification.id);
+        console.log("✅ Pre-approval notification marked as read in Firebase");
+      }
+      
       await addActivity({
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         action: 'Pre-Approved Visitor Checked In',
@@ -1289,9 +1299,11 @@ export default function VisitorApp() {
         status: 'Inside',
         date: new Date().toLocaleDateString()
       });
+      
+      showSecurityToast('Pre-approved visitor checked in successfully!', 'success');
     } catch (error) {
       console.error("❌ Error marking visitor as arrived:", error);
-      alert("Failed to check in visitor. Please try again.");
+      showSecurityToast('Failed to check in visitor. Please try again.', 'error');
     }
   };
 
@@ -1315,27 +1327,22 @@ export default function VisitorApp() {
           date: new Date().toLocaleDateString()
         });
       }
+      
+      showAdminToast('Visitor rejected successfully.', 'success');
     } catch (error) {
       console.error("❌ Error rejecting visitor:", error);
-      alert('Failed to reject visitor. Please try again.');
+      showAdminToast('Failed to reject visitor. Please try again.', 'error');
     }
   };
 
   if (view === 'login') {
     return <LoginScreen onLogin={(role, identifier, userData) => {
-      // ✅ SET FLAG TO TRUE FOR ACTUAL FRESH LOGIN
       isFreshLoginRef.current = true;
       
-      // ✅ RESET notification initialization on fresh login
-      notificationsInitializedRef.current = false;
-      
-      // ✅ CLEAR localStorage tracking on fresh login
       if (role === 'resident') {
-        window.localStorage.removeItem(`pending-visitors-${identifier}`);
         setCurrentResident(identifier);
         setResidentData(userData);
       } else if (role === 'security') {
-        window.localStorage.removeItem('pending-approvals-security');
         setSecurityData(userData);
       } else if (role === 'admin') {
         setAdminData(userData);
@@ -1355,8 +1362,7 @@ export default function VisitorApp() {
             approvals={approvals}
             currentResident={currentResident}
             residentInfo={residentData}
-            residentNotifications={[]}
-            onDismissResidentNotification={() => {}}
+            firebaseNotifications={firebaseNotifications}
             onLogout={logout}
             onAddApproval={() => setView('add-approval')}
             onApproveVisitor={handleApproveVisitor}
@@ -1376,8 +1382,7 @@ export default function VisitorApp() {
             visitors={visitors}
             approvals={approvals}
             securityData={securityData}
-            securityNotifications={[]}
-            onDismissSecurityNotification={() => {}}
+            firebaseNotifications={firebaseNotifications}
             onLogout={logout}
             onCheckIn={() => setView('check-in')}
             onSearch={() => setView('search')}
